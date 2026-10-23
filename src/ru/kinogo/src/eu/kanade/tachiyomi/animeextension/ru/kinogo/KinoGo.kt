@@ -20,6 +20,7 @@ import keiyoushi.utils.getPreferencesLazy
 import keiyoushi.utils.parallelCatchingFlatMap
 import keiyoushi.utils.parseAs
 import keiyoushi.utils.useAsJsoup
+import kotlinx.serialization.Serializable
 import okhttp3.FormBody
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -28,6 +29,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import java.net.URLEncoder
 
 class KinoGo :
     AnimeHttpLegacySource(),
@@ -55,9 +57,20 @@ class KinoGo :
 
     private val playlistUtils by lazy { PlaylistUtils(client, headers) }
 
+    private val webView by lazy { KinoGoWebView() }
+
     override fun headersBuilder() = super.headersBuilder()
         .set("Referer", "$baseUrl/")
         .set("User-Agent", USER_AGENT)
+
+    // The site hides its web player behind the official Android app and serves
+    // player tabs through a signed gateway. The signature is the SHA-256 of the
+    // official APK signing certificate.
+    private val apiHeaders by lazy {
+        headers.newBuilder()
+            .set("X-App-Signature", APP_SIGNATURE)
+            .build()
+    }
 
     // ============================== Popular ===============================
 
@@ -85,11 +98,20 @@ class KinoGo :
 
     // =========================== Anime Details ============================
 
-    override fun animeDetailsRequest(anime: SAnime): Request = GET(baseUrl + anime.url, headers)
+    override fun animeDetailsRequest(anime: SAnime): Request {
+        val id = anime.postId() ?: return GET(baseUrl + anime.url, headers)
+        val path = URLEncoder.encode(anime.url, "UTF-8")
+
+        return GET("$GATEWAY_URL/v1/post/$id?path=$path", apiHeaders)
+    }
 
     override fun getAnimeUrl(anime: SAnime): String = baseUrl + anime.url
 
     override fun animeDetailsParse(response: Response): SAnime {
+        if (response.request.url.host == API_HOST) {
+            return gatewayDetails(response)
+        }
+
         val document = response.useAsJsoup()
         val info = document.infoMap()
 
@@ -114,29 +136,77 @@ class KinoGo :
         }
     }
 
+    private fun gatewayDetails(response: Response): SAnime {
+        val post = response.parseAs<PostResponse>().data
+        val info = post.xfields
+
+        return SAnime.create().apply {
+            url = response.request.url.queryParameter("path") ?: "/${post.id}"
+            title = post.title
+            thumbnail_url = info["poster"]?.takeIf { it.isNotBlank() }?.let {
+                if (it.startsWith("http")) it else "$POSTER_HOST$it"
+            }
+            genre = info["genre-doram"]?.split(',')?.joinToString(", ") { it.trim() }
+                ?: post.category.joinToString(", ") { it.name }
+            author = info["translator"]
+            status = SAnime.COMPLETED
+            description = buildString {
+                (info["desc"] ?: post.short_story).takeIf { it.isNotBlank() }?.let {
+                    appendLine(it)
+                    appendLine()
+                }
+                listOf(
+                    "Год" to info["year-teg-xfsearch"],
+                    "Страна" to info["strana-xfsearch"],
+                    "Время" to info["vremya"],
+                    "Режиссёр" to info["director"],
+                    "В ролях" to info["actors"],
+                ).forEach { (key, value) ->
+                    value?.takeIf { it.isNotBlank() }?.let { appendLine("$key: $it") }
+                }
+            }.trim()
+        }
+    }
+
     // ============================== Episodes ==============================
 
-    override fun episodeListRequest(anime: SAnime): Request = GET(baseUrl + anime.url, headers)
+    override fun episodeListRequest(anime: SAnime): Request {
+        val id = anime.postId() ?: return GET(baseUrl + anime.url, headers)
+
+        return GET("$GATEWAY_URL/v1/post/$id/player", apiHeaders)
+    }
 
     override suspend fun getEpisodeList(anime: SAnime): List<SEpisode> {
-        val document = client.newCall(episodeListRequest(anime)).awaitSuccess().useAsJsoup()
-        val embed = document.embedUrl() ?: return listOf(singleEpisode(anime.url))
+        val player = runCatching {
+            client.newCall(episodeListRequest(anime)).awaitSuccess().parseAs<PlayerResponse>().data
+        }.getOrNull()
 
-        val entries = client.newCall(GET(embed, headers)).awaitSuccess().bodyString().playlistEntries()
+        if (player == null || !player.has_player) return listOf(singleEpisode(anime.url))
 
-        // Movies list voice-overs only; series repeat every voice-over per episode.
-        val episodes = entries.mapNotNull { it.parseLocation() }
-            .distinct()
-            .sortedWith(compareByDescending<Pair<Int, Int>> { it.first }.thenByDescending { it.second })
-        if (episodes.isEmpty()) return listOf(singleEpisode(anime.url))
+        for (embed in player.cinemarEmbeds()) {
+            val entries = entriesFrom(embed)
 
-        return episodes.map { (season, number) ->
-            SEpisode.create().apply {
-                url = "$embed$LOCATION_SEPARATOR$season:$number"
-                episode_number = season * 1000f + number
-                name = "$season сезон, $number серия"
+            if (entries.isEmpty()) continue
+
+            // Movies list voice-overs only; series repeat every voice-over per episode.
+            val episodes = entries.mapNotNull { it.parseLocation() }
+                .distinct()
+                .sortedWith(compareByDescending<Pair<Int, Int>> { it.first }.thenByDescending { it.second })
+
+            if (episodes.isEmpty()) return listOf(singleEpisode(anime.url))
+
+            return episodes.map { (season, number) ->
+                SEpisode.create().apply {
+                    // Keep the title path: player links are short-lived and are
+                    // resolved again right before playback.
+                    url = "${anime.url}$LOCATION_SEPARATOR$season:$number"
+                    episode_number = season * 1000f + number
+                    name = "$season сезон, $number серия"
+                }
             }
         }
+
+        return listOf(singleEpisode(anime.url))
     }
 
     override fun episodeListParse(response: Response): List<SEpisode> = throw UnsupportedOperationException("Not used.")
@@ -144,52 +214,97 @@ class KinoGo :
     // ============================ Video Links =============================
 
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
-        val embed = episode.url.substringBefore(LOCATION_SEPARATOR)
+        val path = episode.url.substringBefore(LOCATION_SEPARATOR)
         val target = episode.url.substringAfter(LOCATION_SEPARATOR, "")
+        val id = path.postId() ?: throw Exception("Плеер не найден на странице")
 
-        val page = if (embed.startsWith("http")) {
-            client.newCall(GET(embed, headers)).awaitSuccess().bodyString()
-        } else {
-            val document = client.newCall(GET(baseUrl + embed, headers)).awaitSuccess().useAsJsoup()
-            val url = document.embedUrl() ?: throw Exception("Плеер не найден на странице")
+        val player = client.newCall(GET("$GATEWAY_URL/v1/post/$id/player", apiHeaders))
+            .awaitSuccess()
+            .parseAs<PlayerResponse>()
+            .data
 
-            return videosFrom(url, "")
+        val embeds = player.cinemarEmbeds()
+        if (embeds.isEmpty()) throw Exception("Плеер не найден на странице")
+
+        var lastError: Exception? = null
+        for (embed in embeds) {
+            try {
+                val videos = videosFrom(embed, target)
+                if (videos.isNotEmpty()) return videos
+            } catch (e: Exception) {
+                lastError = e
+            }
         }
 
-        return videosFrom(embed, target, page)
+        throw lastError ?: Exception("Ссылки на видео не найдены")
     }
 
-    private suspend fun videosFrom(embed: String, target: String, cached: String? = null): List<Video> {
-        val page = cached ?: client.newCall(GET(embed, headers)).awaitSuccess().bodyString()
+    private suspend fun entriesFrom(embed: String): List<Entry> {
+        val remote = runCatching { webView.eval(embed, wantFiles = false) }.getOrNull()
+        val entries = remote?.let { runCatching { it.parseAs<List<EntryDto>>() }.getOrNull() }
+            .orEmpty()
+            .map { Entry(it.title, it.title2, it.data) }
+
+        if (entries.isNotEmpty()) return entries
+
+        // Older mirrors still allow a plain HTTP client.
+        return runCatching {
+            client.newCall(GET(embed, headers)).awaitSuccess().bodyString().playlistEntries()
+        }.getOrDefault(emptyList())
+    }
+
+    private suspend fun videosFrom(embed: String, target: String): List<Video> {
+        val remote = runCatching { webView.eval(embed, wantFiles = true) }.getOrNull()
+        val resolved = remote?.let { runCatching { it.parseAs<List<EntryDto>>() }.getOrNull() }.orEmpty()
+
+        val videos = resolved
+            .map { it to Entry(it.title, it.title2, it.data) }
+            .filter { target.isBlank() || it.second.parseLocation()?.asTarget() == target }
+            .flatMap { (dto, entry) ->
+                val url = dto.file.takeIf { it.startsWith("http") } ?: return@flatMap emptyList()
+                playlistUtils.extractFromHls(
+                    playlistUrl = url,
+                    referer = "${embed.origin()}/",
+                    videoNameGen = { "${entry.title} - $it" },
+                ).ifEmpty { listOf(Video(url, entry.title, url, headers = headers)) }
+            }
+
+        if (videos.isNotEmpty()) return sortedVideos(videos)
+
+        // Fallback for hosts that still answer a plain HTTP client.
+        val page = client.newCall(GET(embed, headers)).awaitSuccess().bodyString()
         val entries = page.playlistEntries()
             .filter { target.isBlank() || it.parseLocation()?.asTarget() == target }
 
         if (entries.isEmpty()) throw Exception("Озвучки для этой серии не найдены")
 
-        val videos = entries.parallelCatchingFlatMap { entry ->
+        val fallback = entries.parallelCatchingFlatMap { entry ->
             val playlist = loadPlaylist(entry.data, embed) ?: return@parallelCatchingFlatMap emptyList()
 
             playlistUtils.extractFromHls(
                 playlistUrl = playlist,
-                referer = "$PLAYER_HOST/",
+                referer = "${embed.origin()}/",
                 videoNameGen = { "${entry.title} - $it" },
             ).ifEmpty { listOf(Video(playlist, entry.title, playlist, headers = headers)) }
         }
 
-        if (videos.isEmpty()) throw Exception("Ссылки на видео не найдены")
+        if (fallback.isEmpty()) throw Exception("Ссылки на видео не найдены")
 
-        return videos.sortedWith(
-            compareByDescending<Video> { it.videoTitle.parseQuality() == preferredQuality }
-                .thenByDescending { it.videoTitle.parseQuality() },
-        )
+        return sortedVideos(fallback)
     }
+
+    private fun sortedVideos(videos: List<Video>): List<Video> = videos.sortedWith(
+        compareByDescending<Video> { it.videoTitle.parseQuality() == preferredQuality }
+            .thenByDescending { it.videoTitle.parseQuality() },
+    )
 
     /** The player exchanges an opaque per-track token for a ready hls url. */
     private suspend fun loadPlaylist(token: String, referer: String): String? {
         val body = "\"${token.replace("\\/", "/")}\"".toRequestBody(JSON_MEDIA_TYPE)
         val requestHeaders = headers.newBuilder().set("Referer", referer).build()
+        val origin = referer.origin()
 
-        val response = client.newCall(POST("$PLAYER_HOST/api/playlist/load", requestHeaders, body))
+        val response = client.newCall(POST("$origin/api/playlist/load", requestHeaders, body))
             .awaitSuccess()
             .parseAs<PlaylistResponse>()
 
@@ -302,11 +417,6 @@ class KinoGo :
         name = "Фильм"
     }
 
-    /** The working player is the lazily loaded cinemar tab. */
-    private fun Document.embedUrl(): String? = select(".video-tabs li[data-src]")
-        .map { it.attr("data-src") }
-        .firstOrNull { it.contains(PLAYER_MARKER, ignoreCase = true) }
-
     private fun Document.infoMap(): Map<String, String> = select(".m_info > div").mapNotNull { row ->
         val key = row.selectFirst("b, strong")?.text()?.trim()?.removeSuffix(":") ?: return@mapNotNull null
         val value = row.text().substringAfter(':').trim()
@@ -325,6 +435,19 @@ class KinoGo :
 
     private fun String.parseQuality(): Int = QUALITY_REGEX.find(this)?.groupValues?.get(1)?.toIntOrNull() ?: 0
 
+    private fun String.origin(): String = toHttpUrl().let { url -> "${url.scheme}://${url.host}" }
+
+    private fun SAnime.postId(): String? = POST_ID_REGEX.find(url)?.groupValues?.get(1)
+
+    private fun String.postId(): String? = POST_ID_REGEX.find(this)?.groupValues?.get(1)
+
+    private fun PlayerData.cinemarEmbeds(): List<String> = (
+        tabs.filter { it.balancer.equals("cinemar", ignoreCase = true) }.map { it.iframe_url } +
+            mirrors.filter { it.provider == 0 }.map { it.iframe_url }
+        )
+        .filter { it.startsWith("http") }
+        .distinct()
+
     companion object {
         private const val PER_PAGE = 10
 
@@ -336,8 +459,11 @@ class KinoGo :
         private const val PREF_QUALITY_DEFAULT = "1080p"
         private val PREF_QUALITY_ENTRIES = listOf("2160p", "1080p", "720p", "480p", "360p")
 
-        private const val PLAYER_HOST = "https://cinemar.cc"
-        private const val PLAYER_MARKER = "cinemar"
+        private const val GATEWAY_URL = "https://api.kinogo-10.biz/gateway"
+        private const val API_HOST = "api.kinogo-10.biz"
+        private const val POSTER_HOST = "https://kinogo-10.biz"
+        private const val APP_SIGNATURE =
+            "3245f97f56a9cff39b6be6a6729becfc127cbcd93d8e1ddcea0cf429f387379d"
         private const val PLAYLIST_MARKER = "W3si"
         private const val LOCATION_SEPARATOR = "#loc="
         private const val BASE64_ALPHABET =
@@ -354,8 +480,56 @@ class KinoGo :
         private val LOCATION_REGEX = Regex("""(\d+)\s*сезон\s*(\d+)\s*серия""")
         private val UNICODE_REGEX = Regex("""\\u([0-9a-fA-F]{4})""")
         private val QUALITY_REGEX = Regex("""(\d+)p""")
+        private val POST_ID_REGEX = Regex("""^/(\d+)(?:-|$)""")
 
         // Some listings carry a typo'd or ranged year, e.g. "(20265)" / "(2024-2025)".
         private val TITLE_TAIL_REGEX = Regex("""\s*\(\d{4}\S*\)\s*$""")
     }
 }
+
+@Serializable
+private class PostResponse(val data: PostData = PostData())
+
+@Serializable
+private class PostData(
+    val id: String = "",
+    val title: String = "",
+    val short_story: String = "",
+    val xfields: Map<String, String> = emptyMap(),
+    val category: List<PostCategory> = emptyList(),
+)
+
+@Serializable
+private class PostCategory(val name: String = "")
+
+@Serializable
+private class PlayerResponse(val data: PlayerData = PlayerData())
+
+@Serializable
+private class PlayerData(
+    val has_player: Boolean = false,
+    val tabs: List<PlayerTab> = emptyList(),
+    val mirrors: List<PlayerMirror> = emptyList(),
+)
+
+@Serializable
+private class PlayerTab(
+    val id: Int = 0,
+    val title: String = "",
+    val balancer: String = "",
+    val iframe_url: String = "",
+)
+
+@Serializable
+private class EntryDto(
+    val title: String = "",
+    val title2: String = "",
+    val data: String = "",
+    val file: String = "",
+)
+
+@Serializable
+private class PlayerMirror(
+    val provider: Int = -1,
+    val iframe_url: String = "",
+)
