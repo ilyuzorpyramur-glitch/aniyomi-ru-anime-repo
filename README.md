@@ -5,7 +5,7 @@
 ## Ссылка для добавления в приложение
 
 ```
-https://raw.githubusercontent.com/Sindrow33/aniyomi-ru-anime-repo/main/index.min.json
+https://raw.githubusercontent.com/ilyuzorpyramur-glitch/aniyomi-ru-anime-repo/main/index.min.json
 ```
 
 Настройки → Браузер → Репозитории расширений → добавить ссылку, затем Браузер → Расширения → обновить список.
