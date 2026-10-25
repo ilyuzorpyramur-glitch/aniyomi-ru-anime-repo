@@ -1,47 +1,93 @@
-# Aniyomi RU Anime Repo
+<h1 align="center">🎬 Aniyomi · Русские источники аниме</h1>
 
-Репозиторий русских аниме-расширений для [Aniyomi](https://github.com/aniyomiorg/aniyomi) / [Anikku](https://github.com/komikku-app/anikku).
+<p align="center">
+  <a href="https://github.com/ilyuzorpyramur-glitch/aniyomi-ru-anime-repo/actions"><img src="https://github.com/ilyuzorpyramur-glitch/aniyomi-ru-anime-repo/actions/workflows/build.yml/badge.svg" alt="Build"></a>
+  <img src="https://img.shields.io/badge/language-Русский-8ca9ff" alt="RU">
+  <img src="https://img.shields.io/badge/приложение-Aniyomi%20%2F%20Tadami-ff8ca9" alt="Aniyomi">
+</p>
 
-## Ссылка для добавления в приложение
+> Репозиторий расширений аниме для **Aniyomi** и форков (Tadami, TachiyomiSY-совместимые плееры).
+> Русские озвучки и онлайн-кинотеатры в одном индексе.
+
+---
+
+## ✨ Особенности
+
+- 🇷🇺 **Русские источники аниме** — AniLibria, AniMedia, AnimeGO, AniLiberty, Kodik-сети и другие
+- 🎥 **Работа с плеерными API** — плейлисты, качества, озвучки через `lib:playlistutils`
+- ⚙️ **Настройки в каждом расширении** — качество по умолчанию, предпочитаемые озвучки
+- 🔐 **Собственный ключ подписи** — стабильные обновления
+- 🤖 **Полная автоматизация** — push в `main` → сборка → подпись → публикация индекса
+
+## 📲 Установка
+
+**Шаг 1.** Добавьте репозиторий в Aniyomi / Tadami:
+
+> Настройки → Расширения → Репозитории → ➕ Добавить
 
 ```
 https://raw.githubusercontent.com/ilyuzorpyramur-glitch/aniyomi-ru-anime-repo/main/index.min.json
 ```
 
-Настройки → Браузер → Репозитории расширений → добавить ссылку, затем Браузер → Расширения → обновить список.
+**Шаг 2.** Откройте **Обзор → Расширения** и установите нужные источники.
 
-## Расширения
+<details>
+<summary>Совместимость с приложениями</summary>
 
-| Расширение | Источники | 18+ |
-|---|---|---|
-| AniLibria | anilibria.top | нет |
-| LordFilm | lordfilmonline.cc (зеркала lordfilmlive.com — переключаются в настройках; сериалы пока без поддержки плеера) | нет |
-| AnimeGO | animego.lat (зеркало переключается в настройках) | нет |
-| Anime365 | smotret-anime.online (для видео нужен аккаунт с подпиской) | нет |
-| Animakima | animakima.ru | нет |
-| AniSprout | anisprout.com | нет |
-| AniMedia | animemedia.org | нет |
-| JustSu | just-su.org | нет |
-| Jut-su.net | jut-su.net | нет |
-| AnimeSSS | animesss.tv | нет |
-| Animevost | animevost.org + зеркало v13.vost.pw | нет |
-| YummyAnime | ru.yummyani.me | нет |
-| Animelib | animelib.org/ru | да |
-| DoramaLend | s2.doramalend.tv (дорамы: Корея, Китай, Япония) | нет |
-| DoramyClub | doramyclub.media (дорамы и фильмы Азии, плеер Kodik) | нет |
-| BLDUB | bldub.com + зеркала bldub.live (BL/GL дорамы и лакорны) | нет |
-| Eporner | eporner.com (18+, официальный API) | да |
-| XNXX | xnxx.com (18+) | да |
-| XV-RU | xv-ru.com (18+, русская версия xvideos) | да |
+| Приложение | Работает |
+|---|:---:|
+| Aniyomi | ✅ |
+| Tadami (форк Aniyomi) | ✅ |
+| Mihon | ❌ (это репозиторий аниме) |
 
-## Сборка
+Для манги используйте [mihon-ru-manga-repo](https://github.com/ilyuzorpyramur-glitch/mihon-ru-manga-repo),
+для ранобэ — [lnreader-ru-plugins](https://github.com/ilyuzorpyramur-glitch/lnreader-ru-plugins).
+</details>
 
-Всё собирается только в GitHub Actions (`.github/workflows/build.yml`): push в `main` → сборка release-APK через Gradle → подпись ключом из секретов → сбор `index.json` / `index.min.json` и иконок → коммит обратно в `main`.
+## 📖 Каталог источников
 
-Секреты репозитория: `SIGNING_KEY` (keystore в base64), `KEY_STORE_PASSWORD`, `KEY_PASSWORD`, `ALIAS`.
+AniLibria · AniMedia · AniMakima · Animedia · AnimeGO · Animesss · AnimeVost · AniSprout · BLDub · DoramaLend · DoramyClub · Justsu · JutsuNet · Kinogo · LakornMania · LordFilm · TVigle · YummyAnime
 
-`repo.json` содержит `signingKeyFingerprint` этого ключа — приложение проверяет подпись APK по нему.
+*Полный актуальный список — в [`index.json`](index.json).*
 
-## Лицензия
+## 🔧 Сборка (для разработчиков)
 
-Apache License 2.0 — см. [LICENSE](./LICENSE). Код расширений основан на [yuzono/anime-extensions](https://github.com/yuzono/anime-extensions) и [aniyomiorg/extensions-source](https://github.com/aniyomiorg/extensions-source).
+Сборка идёт в GitHub Actions при пуше в `main`:
+
+1. Gradle `assembleRelease` по всем модулям (`src/ru/<name>`)
+2. Подпись секретным ключом
+3. Генерация `index.json` / `index.min.json` (имя пакета, версия, id источника, baseUrl)
+4. Коммит `apk/`, `icon/`, `index*.json` обратно
+
+Локально:
+
+```bash
+./gradlew :src:ru:anilibria:assembleRelease
+```
+
+### Формат модуля расширения
+
+```
+src/ru/<имя>/
+├── build.gradle           # extName, extClass, extVersionCode, isNsfw
+├── res/mipmap-*/          # иконка
+└── src/eu/kanade/tachiyomi/animeextension/ru/<имя>/
+    ├── <Класс>.kt         # логика парсинга каталога
+    ├── <Класс>Filters.kt  # фильтры поиска
+    └── Dto.kt             # модели ответов API
+```
+
+## 🛠 Генератор расширений
+
+Новые источники создаются автоматическим генератором
+**[extension-forge](https://github.com/ilyuzorpyramur-glitch/extension-forge)**:
+шаблоны расширений с иконками, настройками качества и автоинкрементом версии,
+плюс ежемесячный сторож, который проверяет расширения на работоспособность.
+
+## 📜 Лицензия
+
+[Apache License 2.0](LICENSE). Исходный код расширений принадлежит проекту
+[Aniyomi](https://github.com/aniyomiorg/aniyomi-extensions) и его контрибьюторам.
+
+---
+<p align="center">Часть экосистемы <a href="https://github.com/ilyuzorpyramur-glitch/extension-forge">extension-forge</a> · аниме · манга · ранобэ</p>
