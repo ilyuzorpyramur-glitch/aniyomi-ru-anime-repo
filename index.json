@@ -277,6 +277,24 @@
     ]
   },
   {
+    "name": "Aniyomi: Kawaki",
+    "pkg": "eu.kanade.tachiyomi.animeextension.all.kawaki",
+    "apk": "aniyomi-all.kawaki-v14.1.apk",
+    "lang": "all",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "Kawaki",
+        "lang": "ru",
+        "id": "3631659733977091065",
+        "baseUrl": "https://kawaki.ru",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: KinoGo",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.kinogo",
     "apk": "aniyomi-ru.kinogo-v14.3.apk",
