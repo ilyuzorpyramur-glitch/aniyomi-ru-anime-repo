@@ -137,7 +137,7 @@ class Domanime :
         val parts = episode.url.split("|")
         val videos = if (parts.size >= 4) kodikVideos(parts[1], parts[2], parts[3]) else emptyList()
 
-        if (videos.isEmpty()) throw Exception("Источник не отдал ссылки: Kodik шифрует поток для этого тайтла")
+        if (videos.isEmpty()) throw Exception("Источник не отдал ссылки для этой серии")
 
         val preferred = preferredQuality
         return videos.sortedWith(
@@ -184,6 +184,11 @@ class Domanime :
             .set("User-Agent", UA)
             .build()
 
+        val videoHeaders = Headers.Builder()
+            .set("Referer", "https://$host/")
+            .set("User-Agent", UA)
+            .build()
+
         val body = client.newCall(POST("https://$host/ftor", apiHeaders, form)).awaitSuccess().bodyText()
         val links = runCatching { JSONObject(body).optJSONObject("links") }.getOrNull() ?: return emptyList()
 
@@ -193,22 +198,46 @@ class Domanime :
             for (index in 0 until array.length()) {
                 val source = array.optJSONObject(index) ?: continue
                 val link = decodeSource(source.optString("src")) ?: continue
-                result += Video(link, "$translation · ${quality}p", link, headers = apiHeaders)
+                result += Video(link, "$translation · ${quality}p", link, headers = videoHeaders)
             }
         }
 
         return result.distinctBy { it.videoUrl }
     }
 
-    /** Kodik отдаёт поток либо открытым, либо base64-обёрткой; зашифрованное не разбираем. */
+    /**
+     * Kodik шифрует ссылку в два слоя: сначала сдвиг каждой буквы на 18 (Caesar),
+     * затем base64; результат может быть обёрнут в /s/m/{base64} — как в player.js.
+     */
     private fun decodeSource(source: String): String? {
-        if (source.startsWith("http")) return source
+        if (source.startsWith("http")) return unwrapRedirect(source)
 
-        val decoded = runCatching { String(Base64.decode(source, Base64.DEFAULT)) }.getOrNull() ?: return null
-        if (decoded.startsWith("http")) return decoded
+        val shifted = buildString {
+            source.forEach { char ->
+                if (char.isLetter()) {
+                    val limit = if (char <= 'Z') 'Z'.code else 'z'.code
+                    val code = char.code + 18
+                    append((if (code <= limit) code else code - 26).toChar())
+                } else {
+                    append(char)
+                }
+            }
+        }
 
-        val index = decoded.indexOf("http")
-        return if (index >= 0) decoded.substring(index).trim() else null
+        val decoded = runCatching { String(Base64.decode(shifted, Base64.DEFAULT)) }.getOrNull() ?: return null
+        return unwrapRedirect(decoded.trim())
+    }
+
+    /** Второй слой: /s/m/{base64} разворачивается в настоящий адрес CDN. */
+    private fun unwrapRedirect(url: String): String? {
+        if (!url.startsWith("http")) return null
+
+        val index = url.indexOf(SHORT_LINK_MARKER)
+        if (index < 0) return url
+
+        val payload = url.substring(index + SHORT_LINK_MARKER.length).substringBefore("/").substringBefore("?")
+        val inner = runCatching { String(Base64.decode(payload, Base64.DEFAULT)) }.getOrNull() ?: return url
+        return inner.trim().takeIf { it.startsWith("http") } ?: url
     }
 
     // ============================== Settings ==============================
@@ -317,5 +346,6 @@ class Domanime :
         private val QUALITY_REGEX = Regex("""(\d{3,4})p""")
         private val URL_PARAMS_REGEX = Regex("""urlParams\s*=\s*'(\{.*?\})'""", RegexOption.DOT_MATCHES_ALL)
         private val REF_REGEX = Regex("""https%3A%2F%2F[^"]*""")
+        private const val SHORT_LINK_MARKER = "/s/m/"
     }
 }
