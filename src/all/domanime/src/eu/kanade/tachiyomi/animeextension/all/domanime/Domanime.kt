@@ -37,7 +37,6 @@ class Domanime :
 
     private val preferences by getPreferencesLazy()
 
-
     override fun headersBuilder() = super.headersBuilder()
         .set("Referer", "$baseUrl/")
         .set("Accept-Language", "ru-RU,ru;q=0.9,en;q=0.8")
