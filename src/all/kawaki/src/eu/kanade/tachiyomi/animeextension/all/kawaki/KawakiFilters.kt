@@ -69,8 +69,7 @@ object KawakiFilters {
 
     class YearFilter : AnimeFilter.Select<String>("Год", YEARS.toTypedArray(), 0)
 
-    class StatusFilter :
-        AnimeFilter.Select<String>("Статус", STATUSES.map { it.first }.toTypedArray(), 0)
+    class StatusFilter : AnimeFilter.Select<String>("Статус", STATUSES.map { it.first }.toTypedArray(), 0)
 
     val FILTER_LIST: AnimeFilterList
         get() = AnimeFilterList(

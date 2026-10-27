@@ -233,9 +233,7 @@ class Kawaki :
     }
 
     /** Данные страницы лежат в RSC-потоке Next.js с экранированными кавычками. */
-    private fun String.unescapeRsc(): String = replace("\\\"", "\"")
-        .replace("\\u0026", "&")
-        .replace("\\n", " ")
+    private fun String.unescapeRsc(): String = replace("\\\"", "\"").replace("\\u0026", "&").replace("\\n", " ")
 
     private fun parseJsonArray(payload: String, key: String): JSONArray {
         val anchor = payload.indexOf("\"$key\":[")
