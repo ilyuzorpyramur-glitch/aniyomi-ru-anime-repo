@@ -259,11 +259,9 @@ class AnimRu :
         return PLAYER_ANY_REGEX.find(html)?.groupValues?.get(1)?.toAbsoluteUrl()
     }
 
-    private fun fallbackPlayerUrl(episode: SEpisode): String? =
-        PAGE_SLUG_REGEX.find(episode.url)?.groupValues?.get(1)?.let { "/$it" }
+    private fun fallbackPlayerUrl(episode: SEpisode): String? = PAGE_SLUG_REGEX.find(episode.url)?.groupValues?.get(1)?.let { "/$it" }
 
-    private fun isBlocked(html: String): Boolean =
-        "Just a moment" in html || "Attention Required" in html || "cf-browser-verification" in html
+    private fun isBlocked(html: String): Boolean = "Just a moment" in html || "Attention Required" in html || "cf-browser-verification" in html
 
     private fun pageUrl(path: String, page: Int): String = if (page <= 1) "$baseUrl$path" else "$baseUrl$path/page/$page/"
 
