@@ -15,6 +15,7 @@ import keiyoushi.utils.AnimeHttpLegacySource
 import keiyoushi.utils.addListPreference
 import keiyoushi.utils.getPreferencesLazy
 import keiyoushi.utils.parseAs
+import kotlinx.serialization.Serializable
 import okhttp3.FormBody
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -243,10 +244,13 @@ class Domanime : AnimeHttpLegacySource(),
 
     // =============================== Utils ================================
 
+    @Serializable
     private data class LinksDto(val links: Map<String, List<LinkDto>> = emptyMap())
 
+    @Serializable
     private data class LinkDto(val src: String = "", val type: String? = null)
 
+    @Serializable
     private data class KodikUrlParams(
         val d: String = "",
         val d_sign: String = "",
