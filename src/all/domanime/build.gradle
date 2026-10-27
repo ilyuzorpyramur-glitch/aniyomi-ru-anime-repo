@@ -1,5 +1,5 @@
 ext {
-    extName = 'ДомАниме'
+    extName = 'DomAnime'
     extClass = '.Domanime'
     extVersionCode = 1
     isNsfw = false
