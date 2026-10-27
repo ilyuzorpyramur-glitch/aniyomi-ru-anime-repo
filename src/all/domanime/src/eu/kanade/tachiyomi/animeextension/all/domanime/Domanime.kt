@@ -25,8 +25,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
-class Domanime :
-    AnimeHttpLegacySource(),
+class Domanime : AnimeHttpLegacySource(),
     ConfigurableAnimeSource {
 
     override val name = "ДомАниме"
