@@ -2,7 +2,6 @@ package eu.kanade.tachiyomi.animeextension.all.domanime
 
 import android.util.Base64
 import androidx.preference.PreferenceScreen
-import aniyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -38,7 +37,6 @@ class Domanime :
 
     private val preferences by getPreferencesLazy()
 
-    private val playlistUtils by lazy { PlaylistUtils(client, headers) }
 
     override fun headersBuilder() = super.headersBuilder()
         .set("Referer", "$baseUrl/")
