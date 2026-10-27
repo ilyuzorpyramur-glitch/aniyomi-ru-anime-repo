@@ -45,25 +45,29 @@ class AnimRu :
     // страниц и сортируем карточки по рейтингу, который отдаёт сам сайт.
     override fun popularAnimeRequest(page: Int): Request = GET(pageUrl("/home/", page * POPULAR_PAGES), headers)
 
-    override fun popularAnimeParse(response: Response): AnimesPage = runBlocking {
-        val cards = response.parseDocument().cards().toMutableList()
-        val startPage = response.request.url.toString().pageNumber()
+    override fun popularAnimeParse(response: Response): AnimesPage {
+        val cards = runBlocking {
+            val collected = response.parseDocument().cards().toMutableList()
+            val startPage = response.request.url.toString().pageNumber()
 
-        if (cards.isNotEmpty()) {
-            for (extra in 1 until POPULAR_PAGES) {
-                val extraPage = client.newCall(GET(pageUrl("/home/", startPage + extra), headers))
-                    .awaitSuccess()
-                    .parseDocument()
-                    .cards()
-                cards += extraPage
+            if (collected.isNotEmpty()) {
+                for (extra in 1 until POPULAR_PAGES) {
+                    val extraCards = client.newCall(GET(pageUrl("/home/", startPage + extra), headers))
+                        .awaitSuccess()
+                        .parseDocument()
+                        .cards()
+                    collected += extraCards
+                }
             }
+
+            collected
         }
 
         val sorted = cards
             .distinctBy { it.anime.url }
             .sortedWith(compareByDescending<Card> { it.rating })
 
-        AnimesPage(sorted.map { it.anime }, sorted.size >= ITEMS_PER_PAGE)
+        return AnimesPage(sorted.map { it.anime }, sorted.size >= ITEMS_PER_PAGE)
     }
 
     // =============================== Latest ===============================
