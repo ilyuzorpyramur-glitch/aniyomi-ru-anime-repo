@@ -31,13 +31,13 @@ class MegaPorno : AnimeHttpLegacySource() {
 
     // ============================== Popular ===============================
 
-    override fun popularAnimeRequest(page: Int): Request = GET(catalogUrl(page, MegaPornoFilters.DEFAULT_CATEGORY), headers)
+    override fun popularAnimeRequest(page: Int): Request = GET(popularUrl(page), headers)
 
     override fun popularAnimeParse(response: Response): AnimesPage = listParse(response)
 
     // =============================== Latest ===============================
 
-    override fun latestUpdatesRequest(page: Int): Request = GET(catalogUrl(page, MegaPornoFilters.DEFAULT_CATEGORY), headers)
+    override fun latestUpdatesRequest(page: Int): Request = GET(latestUrl(page), headers)
 
     override fun latestUpdatesParse(response: Response): AnimesPage = listParse(response)
 
@@ -163,6 +163,20 @@ class MegaPorno : AnimeHttpLegacySource() {
         "$baseUrl/video/${category}_page-$page.html"
     }
 
+    /** «Популярное сегодня»: отдельная лента со своим форматом пагинации. */
+    private fun popularUrl(page: Int): String = if (page <= 1) {
+        "$baseUrl/$POPULAR_PATH"
+    } else {
+        "$baseUrl/videos/popular_page-$page.html"
+    }
+
+    /** «Что нового» — лента последних загруженных роликов без привязки к категории. */
+    private fun latestUrl(page: Int): String = if (page <= 1) {
+        "$baseUrl/$LATEST_PATH"
+    } else {
+        "$baseUrl/last/page-$page.html"
+    }
+
     private fun listParse(response: Response, singlePage: Boolean = false): AnimesPage {
         val doc = response.parseDocument()
         val animes = doc.select("div.thumbnail").mapNotNull { it.toSAnime() }
@@ -211,6 +225,10 @@ class MegaPorno : AnimeHttpLegacySource() {
 
     companion object {
         private const val ITEMS_PER_PAGE = 30
+
+        private const val POPULAR_PATH = "videos/popular.html"
+
+        private const val LATEST_PATH = "last/"
 
         private val WINDOWS_1251: Charset = Charset.forName("windows-1251")
 
