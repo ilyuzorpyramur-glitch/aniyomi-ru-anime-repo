@@ -42,8 +42,7 @@ object AnimRuFilters {
         "Японское" to "/yaponskoye-anime/",
     )
 
-    class SectionFilter :
-        AnimeFilter.Select<String>("Раздел", SECTIONS.map { it.first }.toTypedArray(), 0)
+    class SectionFilter : AnimeFilter.Select<String>("Раздел", SECTIONS.map { it.first }.toTypedArray(), 0)
 
     val FILTER_LIST: AnimeFilterList
         get() = AnimeFilterList(SectionFilter())
