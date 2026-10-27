@@ -1,7 +1,8 @@
 package eu.kanade.tachiyomi.animeextension.all.domanime
 
-import android.net.Uri
+import android.util.Base64
 import androidx.preference.PreferenceScreen
+import aniyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -14,13 +15,12 @@ import eu.kanade.tachiyomi.network.awaitSuccess
 import keiyoushi.utils.AnimeHttpLegacySource
 import keiyoushi.utils.addListPreference
 import keiyoushi.utils.getPreferencesLazy
-import keiyoushi.utils.parseAs
-import kotlinx.serialization.Serializable
 import okhttp3.FormBody
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
+import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -40,37 +40,35 @@ class Domanime :
 
     private val preferences by getPreferencesLazy()
 
+    private val playlistUtils by lazy { PlaylistUtils(client, headers) }
+
     override fun headersBuilder() = super.headersBuilder()
         .set("Referer", "$baseUrl/")
         .set("Accept-Language", "ru-RU,ru;q=0.9,en;q=0.8")
 
     // ============================== Popular ===============================
 
-    // Каталог сайта: обычная лента с пагинацией /page/N/.
-    override fun popularAnimeRequest(page: Int): Request = GET(pageUrl("/", page), headers)
+    override fun popularAnimeRequest(page: Int): Request = GET(pageUrl("/f/sort=rating/", page), headers)
 
     override fun popularAnimeParse(response: Response): AnimesPage = listParse(response)
 
     // =============================== Latest ===============================
 
-    // Главная собирает курируемые подборки — порядок отличается от ленты каталога.
-    override fun latestUpdatesRequest(page: Int): Request = GET(pageUrl("/page/", page), headers)
+    override fun latestUpdatesRequest(page: Int): Request = GET(pageUrl("/f/sort=date/", page), headers)
 
     override fun latestUpdatesParse(response: Response): AnimesPage = listParse(response)
 
     // =============================== Search ===============================
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
-        if (query.isBlank()) return GET(pageUrl("/", page), headers)
+        if (query.isBlank()) return GET(pageUrl(DomanimeFilters.buildPath(filters), page), headers)
 
-        // DLE отвечает 307 на POST и отдаёт готовую страницу /search/{query}/.
-        val url = "$baseUrl/search/${query.trim().replace(' ', '+')}/"
-        return GET(url, headers)
+        return GET(pageUrl("/search/${query.trim().replace(' ', '+')}/", page), headers)
     }
 
-    override fun searchAnimeParse(response: Response): AnimesPage = listParse(response, singlePage = true)
+    override fun searchAnimeParse(response: Response): AnimesPage = listParse(response)
 
-    override fun getFilterList(): AnimeFilterList = AnimeFilterList()
+    override fun getFilterList(): AnimeFilterList = DomanimeFilters.FILTER_LIST
 
     // =========================== Anime Details ============================
 
@@ -86,8 +84,8 @@ class Domanime :
             description = doc.selectFirst("meta[property=og:description]")?.attr("content")
                 ?.takeIf { it.isNotBlank() }
                 ?: doc.selectFirst("meta[name=description]")?.attr("content")
-            genre = doc.select("a[href*=/xfields/], .pmovie__genres a").map { it.text().trim() }
-                .filter { it.isNotBlank() && it.length < 30 }
+            genre = doc.select("div.movie-info a[href^=/]").map { it.text().trim() }
+                .filter { it.isNotBlank() && it.length < 24 }
                 .distinct()
                 .take(10)
                 .joinToString(", ")
@@ -106,56 +104,45 @@ class Domanime :
 
         if (kodik != null) {
             val translators = kodik.optJSONObject("translators")
-            val translation = translators?.keys()?.asSequence()?.firstOrNull { key ->
-                translators.optJSONObject(key)
+            val names = translators?.keys()?.asSequence()?.toList().orEmpty()
+
+            for (name in names) {
+                val season = translators?.optJSONObject(name)
                     ?.optJSONObject("seasons")
                     ?.optJSONObject("1")
-                    ?.optString("link")
-                    ?.isNotBlank() == true
-            }
+                    ?: continue
+                val link = season.optString("link").toAbsoluteUrl().takeIf { it.startsWith("http") } ?: continue
+                val list = season.optJSONArray("list")
+                val last = list?.optInt((list.length() - 1).coerceAtLeast(0), 0) ?: 0
+                val count = if (list != null && last > 0) last else 1
 
-            val season = translation?.let { translators?.optJSONObject(it)?.optJSONObject("seasons")?.optJSONObject("1") }
-            val link = season?.optString("link")?.toAbsoluteUrl()
-            val numbers = season?.optJSONArray("list")
-
-            if (translation != null && link != null && numbers != null && numbers.length() > 0) {
-                return (0 until numbers.length()).mapNotNull { index ->
-                    val number = numbers.optInt(index, 0).takeIf { it > 0 } ?: return@mapNotNull null
-                    createEpisode(translation, link, number)
-                }.sortedBy { it.episode_number }
-            }
-
-            if (translation != null && link != null) {
-                return listOf(createEpisode(translation, link, 1))
+                return (1..count).map { number ->
+                    SEpisode.create().apply {
+                        url = "kodik|$name|$link|$number"
+                        episode_number = number.toFloat()
+                        this.name = "Серия $number"
+                        scanlator = name
+                    }
+                }
             }
         }
 
-        // Страницы без Kodik: единственный ролик на странице тайтла.
         return listOf(
             SEpisode.create().apply {
-                url = response.request.url.encodedPath
+                url = "kodik|||1"
                 name = "Серия 1"
                 episode_number = 1f
             },
         )
     }
 
-    private fun createEpisode(translation: String, link: String, number: Int): SEpisode = SEpisode.create().apply {
-        url = "kodik|$translation|$link|$number"
-        name = "Серия $number"
-        episode_number = number.toFloat()
-        scanlator = translation
-    }
-
     // ============================ Video Links =============================
 
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
-        val videos = when {
-            episode.url.startsWith("kodik|") -> kodikVideos(episode.url.split("|"))
-            else -> emptyList()
-        }
+        val parts = episode.url.split("|")
+        val videos = if (parts.size >= 4) kodikVideos(parts[1], parts[2], parts[3]) else emptyList()
 
-        if (videos.isEmpty()) throw Exception("Не удалось получить ссылки на видео для этой серии")
+        if (videos.isEmpty()) throw Exception("Источник не отдал ссылки: Kodik шифрует поток для этого тайтла")
 
         val preferred = preferredQuality
         return videos.sortedWith(
@@ -164,64 +151,69 @@ class Domanime :
         )
     }
 
-    private suspend fun kodikVideos(parts: List<String>): List<Video> {
-        if (parts.size < 4) return emptyList()
+    private suspend fun kodikVideos(translation: String, seasonUrl: String, number: String): List<Video> {
+        if (seasonUrl.isEmpty()) return emptyList()
 
-        val translation = parts[1]
-        val seasonUrl = parts[2]
-        val number = parts[3]
-
-        val page = client.newCall(GET(seasonUrl, headers)).awaitSuccess().bodyText()
-        val option = Jsoup.parse(page).select(".serial-series-box option")
-            .firstOrNull { it.attr("value").toDoubleOrNull()?.toInt() == number.toIntOrNull() }
+        val seasonPage = client.newCall(GET(seasonUrl, headers)).awaitSuccess().bodyText()
+        val option = Jsoup.parse(seasonPage).select(".serial-series-box option")
+            .firstOrNull { it.attr("value").toIntOrNull() == number.toIntOrNull() }
             ?: return emptyList()
 
         val id = option.attr("data-id").takeIf { it.isNotBlank() } ?: return emptyList()
         val hash = option.attr("data-hash").takeIf { it.isNotBlank() } ?: return emptyList()
         val playerUrl = "https://kodikplayer.com/seria/$id/$hash/720p"
-
         val playerPage = client.newCall(GET(playerUrl, headers)).awaitSuccess().bodyText()
-        val params = URL_PARAMS_REGEX.find(playerPage)?.groupValues?.get(1)?.parseAs<KodikUrlParams>()
+
+        val params = URL_PARAMS_REGEX.find(playerPage)?.groupValues?.get(1)
+            ?.let { runCatching { JSONObject(it) }.getOrNull() }
             ?: return emptyList()
-        if (params.d_sign.isEmpty() || params.pd.isEmpty()) return emptyList()
+        if (params.optString("pd").isEmpty()) return emptyList()
 
-        val segments = playerUrl.toHttpUrl().pathSegments
-        if (segments.size < 3) return emptyList()
-
+        val host = params.optString("pd")
         val form = FormBody.Builder()
-            .add("d", params.d)
-            .add("d_sign", Uri.decode(params.d_sign))
-            .add("pd", params.pd)
-            .add("pd_sign", Uri.decode(params.pd_sign))
-            .add("ref", Uri.decode(params.ref))
-            .add("ref_sign", Uri.decode(params.ref_sign))
-            .add("type", segments[0])
-            .add("id", segments[1])
-            .add("hash", segments[2])
+            .add("d", params.optString("d"))
+            .add("d_sign", params.optString("d_sign"))
+            .add("pd", host)
+            .add("pd_sign", params.optString("pd_sign"))
+            .add("ref", REF_REGEX.find(params.optString("ref"))?.let { it.groupValues[1] } ?: params.optString("ref"))
+            .add("ref_sign", params.optString("ref_sign"))
+            .add("type", "seria")
+            .add("id", id)
+            .add("hash", hash)
             .build()
 
         val apiHeaders = Headers.Builder()
-            .set("Referer", "$baseUrl/")
-            .set("Origin", "https://${params.pd}")
+            .set("Referer", "$host/".let { "https://$it" })
+            .set("Origin", "https://$host")
+            .set("X-Requested-With", "XMLHttpRequest")
             .set("User-Agent", UA)
             .build()
 
-        val response = client.newCall(
-            POST("https://${params.pd}/ftor", apiHeaders, form),
-        ).awaitSuccess().bodyText()
+        val body = client.newCall(POST("https://$host/ftor", apiHeaders, form)).awaitSuccess().bodyText()
+        val links = runCatching { JSONObject(body).optJSONObject("links") }.getOrNull() ?: return emptyList()
 
-        val links = runCatching { response.parseAs<LinksDto>().links }.getOrNull() ?: return emptyList()
-
-        return links.entries
-            .sortedByDescending { it.key.filter { ch -> ch.isDigit() }.toIntOrNull() ?: 0 }
-            .flatMap { (quality, sources) ->
-                sources.mapNotNull { source ->
-                    val link = source.src.takeIf { it.isNotBlank() && it.startsWith("http") }
-                        ?: return@mapNotNull null
-                    Video(link, "$translation · $quality", link, headers = apiHeaders)
-                }
+        val result = mutableListOf<Video>()
+        links.keys().asSequence().sortedByDescending { it.toIntOrNull() ?: 0 }.forEach { quality ->
+            val array = links.optJSONArray(quality) ?: return@forEach
+            for (index in 0 until array.length()) {
+                val source = array.optJSONObject(index) ?: continue
+                val link = decodeSource(source.optString("src")) ?: continue
+                result += Video(link, "$translation · ${quality}p", link, headers = apiHeaders)
             }
-            .distinctBy { it.videoUrl }
+        }
+
+        return result.distinctBy { it.videoUrl }
+    }
+
+    /** Kodik отдаёт поток либо открытым, либо base64-обёрткой; зашифрованное не разбираем. */
+    private fun decodeSource(source: String): String? {
+        if (source.startsWith("http")) return source
+
+        val decoded = runCatching { String(Base64.decode(source, Base64.DEFAULT)) }.getOrNull() ?: return null
+        if (decoded.startsWith("http")) return decoded
+
+        val index = decoded.indexOf("http")
+        return if (index >= 0) decoded.substring(index).trim() else null
     }
 
     // ============================== Settings ==============================
@@ -245,59 +237,56 @@ class Domanime :
 
     // =============================== Utils ================================
 
-    @Serializable
-    private data class LinksDto(val links: Map<String, List<LinkDto>> = emptyMap())
-
-    @Serializable
-    private data class LinkDto(val src: String = "", val type: String? = null)
-
-    @Serializable
-    private data class KodikUrlParams(
-        val d: String = "",
-        val d_sign: String = "",
-        val pd: String = "",
-        val pd_sign: String = "",
-        val ref: String = "",
-        val ref_sign: String = "",
-    )
-
-    /** Kodik-конфиг сайта лежит в инлайн-скрипте: var kodik = {". */
-    private fun Document.kodikPayload(): JSONObject? {
-        val script = select("script:containsData(var kodik)").firstOrNull()?.data()
-            ?: return null
-        val start = script.indexOf('{')
-        val end = script.lastIndexOf('}')
-        if (start < 0 || end <= start) return null
-
-        return runCatching { JSONObject(script.substring(start, end + 1)) }.getOrNull()
+    private fun pageUrl(path: String, page: Int): String {
+        if (page <= 1) return baseUrl + path
+        return "$baseUrl${path.removeSuffix("/")}/page/$page/"
     }
 
-    private fun pageUrl(path: String, page: Int): String = when {
-        page <= 1 && path.endsWith("page/") -> "$baseUrl/page/1/"
-        page <= 1 -> "$baseUrl${path.removePrefix("/").let { if (it.isEmpty()) "" else it }}"
-        else -> "$baseUrl${path.removePrefix("/").removeSuffix("/")}/page/$page/"
-    }
-
-    private fun listParse(response: Response, singlePage: Boolean = false): AnimesPage {
+    private fun listParse(response: Response): AnimesPage {
         val doc = response.parseDocument()
-        val animes = doc.select("div.popular-item a[href]")
+        val animes = doc.select("#dle-content div.movie-item")
             .mapNotNull { it.toSAnime() }
             .distinctBy { it.url }
 
-        return AnimesPage(animes, !singlePage && animes.size >= ITEMS_PER_PAGE)
+        val current = PAGE_REGEX.find(response.request.url.encodedPath)?.groupValues?.get(1)?.toIntOrNull() ?: 1
+        val hasNext = doc.select("#pagination a[href]").any { link ->
+            (PAGE_REGEX.find(link.attr("href"))?.groupValues?.get(1)?.toIntOrNull() ?: 0) > current
+        }
+
+        return AnimesPage(animes, hasNext)
     }
 
     private fun Element.toSAnime(): SAnime? {
-        val href = attr("href").takeIf { POST_REGEX.containsMatchIn(it) } ?: return null
-        val card = closest("div.popular-item") ?: this
+        val anchor = selectFirst("a.movie-item__link[href]") ?: return null
+        val href = anchor.attr("href").takeIf { POST_REGEX.containsMatchIn(it) } ?: return null
 
         return SAnime.create().apply {
             url = href.substringAfter(baseUrl)
-            title = card.selectFirst(".popular-item__title, .poster__title, h3")?.text()?.trim()
-                ?.takeIf { it.isNotBlank() }
-                ?: card.selectFirst("img")?.attr("alt").orEmpty()
-            thumbnail_url = card.selectFirst("img")?.attr("src")?.toAbsoluteUrl()
+            title = selectFirst(".movie-item__title")?.text()?.trim()?.takeIf { it.isNotBlank() }
+                ?: selectFirst("img")?.attr("alt").orEmpty()
+            thumbnail_url = selectFirst("img")?.attr("src")?.toAbsoluteUrl()
         }
+    }
+
+    private fun Document.kodikPayload(): JSONObject? {
+        val script = select("script:containsData(var kodik)").firstOrNull()?.data() ?: return null
+        val start = script.indexOf('{')
+        if (start < 0) return null
+
+        var depth = 0
+        for (index in start until script.length) {
+            when (script[index]) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) {
+                        return runCatching { JSONObject(script.substring(start, index + 1)) }.getOrNull()
+                    }
+                }
+            }
+        }
+
+        return null
     }
 
     private fun Response.parseDocument(): Document = Jsoup.parse(bodyText(), baseUrl)
@@ -319,10 +308,8 @@ class Domanime :
     private fun String.parseQuality(): Int = QUALITY_REGEX.find(this)?.groupValues?.get(1)?.toIntOrNull() ?: 0
 
     companion object {
-        private const val ITEMS_PER_PAGE = 10
-
         private const val UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
         private const val PREF_QUALITY_KEY = "pref_quality"
         private const val PREF_QUALITY_DEFAULT = "720p"
@@ -331,7 +318,9 @@ class Domanime :
         private val WINDOWS_1251 = java.nio.charset.Charset.forName("windows-1251")
 
         private val POST_REGEX = Regex("""/\d+-[^/]+\.html""")
+        private val PAGE_REGEX = Regex("""/page/(\d+)/""")
         private val QUALITY_REGEX = Regex("""(\d{3,4})p""")
-        private val URL_PARAMS_REGEX = Regex("""urlParams\s*=\s*(\{[^}]+\})""")
+        private val URL_PARAMS_REGEX = Regex("""urlParams\s*=\s*'(\{.*?\})'""", RegexOption.DOT_MATCHES_ALL)
+        private val REF_REGEX = Regex("""https%3A%2F%2F[^"]*""")
     }
 }
