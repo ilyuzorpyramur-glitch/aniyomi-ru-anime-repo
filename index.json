@@ -313,6 +313,24 @@
     ]
   },
   {
+    "name": "Aniyomi: Mega Porno",
+    "pkg": "eu.kanade.tachiyomi.animeextension.all.megaporno",
+    "apk": "aniyomi-all.megaporno-v14.1.apk",
+    "lang": "all",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 1,
+    "sources": [
+      {
+        "name": "Mega Porno",
+        "lang": "all",
+        "id": "3995732747858333347",
+        "baseUrl": "https://w.mega-porno.club",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: NoodleMagazine",
     "pkg": "eu.kanade.tachiyomi.animeextension.all.noodlemagazine",
     "apk": "aniyomi-all.noodlemagazine-v14.1.apk",
