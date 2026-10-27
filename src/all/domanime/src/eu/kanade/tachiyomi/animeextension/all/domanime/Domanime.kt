@@ -206,11 +206,12 @@ class Domanime :
     }
 
     /**
-     * Kodik шифрует ссылку в два слоя: сначала сдвиг каждой буквы на 18 (Caesar),
-     * затем base64; результат может быть обёрнут в /s/m/{base64} — как в player.js.
+     * Kodik шифрует адрес сдвигом букв на 18 (Caesar) и base64. Результат — рабочий
+     * плейлист вида {host}/s/m/{base64}/{hash}:{expiry}/{quality}.mp4:hls:manifest.m3u8,
+     * его нельзя «разворачивать» в /useruploads/, иначе CDN отвечает 401.
      */
     private fun decodeSource(source: String): String? {
-        if (source.startsWith("http")) return unwrapRedirect(source)
+        if (source.startsWith("http")) return source
 
         val shifted = buildString {
             source.forEach { char ->
@@ -224,20 +225,9 @@ class Domanime :
             }
         }
 
-        val decoded = runCatching { String(Base64.decode(shifted, Base64.DEFAULT)) }.getOrNull() ?: return null
-        return unwrapRedirect(decoded.trim())
-    }
-
-    /** Второй слой: /s/m/{base64} разворачивается в настоящий адрес CDN. */
-    private fun unwrapRedirect(url: String): String? {
-        if (!url.startsWith("http")) return null
-
-        val index = url.indexOf(SHORT_LINK_MARKER)
-        if (index < 0) return url
-
-        val payload = url.substring(index + SHORT_LINK_MARKER.length).substringBefore("/").substringBefore("?")
-        val inner = runCatching { String(Base64.decode(payload, Base64.DEFAULT)) }.getOrNull() ?: return url
-        return inner.trim().takeIf { it.startsWith("http") } ?: url
+        return runCatching { String(Base64.decode(shifted, Base64.DEFAULT)).trim() }
+            .getOrNull()
+            ?.takeIf { it.startsWith("http") }
     }
 
     // ============================== Settings ==============================
@@ -346,6 +336,5 @@ class Domanime :
         private val QUALITY_REGEX = Regex("""(\d{3,4})p""")
         private val URL_PARAMS_REGEX = Regex("""urlParams\s*=\s*'(\{.*?\})'""", RegexOption.DOT_MATCHES_ALL)
         private val REF_REGEX = Regex("""https%3A%2F%2F[^"]*""")
-        private const val SHORT_LINK_MARKER = "/s/m/"
     }
 }
