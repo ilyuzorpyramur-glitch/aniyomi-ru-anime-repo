@@ -45,7 +45,11 @@ class AnimRu : AnimeHttpLegacySource() {
     // =============================== Search ===============================
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
-        // DLE-поиск отдаёт один список результатов, постраничной выдачи у него нет.
+        // Пустой запрос — листаем выбранный раздел, иначе идём в поиск DLE.
+        if (query.isBlank()) {
+            return GET(pageUrl(AnimRuFilters.getSection(filters), page), headers)
+        }
+
         val url = "$baseUrl/index.php".toHttpUrl().newBuilder()
             .addQueryParameter("do", "search")
             .addQueryParameter("subaction", "search")
@@ -57,7 +61,7 @@ class AnimRu : AnimeHttpLegacySource() {
 
     override fun searchAnimeParse(response: Response): AnimesPage = listParse(response, singlePage = true)
 
-    override fun getFilterList(): AnimeFilterList = AnimeFilterList()
+    override fun getFilterList(): AnimeFilterList = AnimRuFilters.FILTER_LIST
 
     // =========================== Anime Details ============================
 
@@ -91,14 +95,16 @@ class AnimRu : AnimeHttpLegacySource() {
     override fun episodeListParse(response: Response): List<SEpisode> {
         val doc = response.parseDocument()
 
+        val titlePath = response.request.url.encodedPath
         val episodes = doc.select("select.sel_page option[value*=/page-]").mapNotNull { option ->
             val path = option.attr("value").trim().takeIf { it.startsWith("/") } ?: return@mapNotNull null
-            val number = SERIES_REGEX.find(option.text())?.groupValues?.get(1)?.toFloatOrNull() ?: 0f
+            val number = SERIES_REGEX.find(option.text())?.groupValues?.get(1)?.toIntOrNull() ?: 0
 
             SEpisode.create().apply {
-                url = path
+                // Страницы /page-1-*.html на сайте нет: первая серия отдаётся по каноническому адресу.
+                url = if (number == 1) titlePath else path
                 name = option.text().trim()
-                episode_number = number
+                episode_number = number.toFloat()
             }
         }.distinctBy { it.url }
 
@@ -107,7 +113,7 @@ class AnimRu : AnimeHttpLegacySource() {
         // Односерийные тайтлы не имеют списка серий — играем то, что на странице.
         return listOf(
             SEpisode.create().apply {
-                url = response.request.url.encodedPath
+                url = titlePath
                 name = "Серия 1"
                 episode_number = 1f
             },
@@ -120,24 +126,38 @@ class AnimRu : AnimeHttpLegacySource() {
         val episodeUrl = baseUrl + episode.url
         val page = client.newCall(GET(episodeUrl, headers)).awaitSuccess().bodyText()
 
-        val playerUrl = PLAYER_REGEX.find(page)?.groupValues?.get(1)
-            ?: throw Exception("На странице серии нет плеера")
+        val playerUrl = findPlayerUrl(page)
+            ?: fallbackPlayerUrl(episode)?.let { url ->
+                client.newCall(GET(url, headers)).awaitSuccess().bodyText().let(::findPlayerUrl)
+            }
+            ?: throw Exception(
+                if (isBlocked(page)) {
+                    "Сайт отдал защиту Cloudflare вместо страницы — попробуйте позже"
+                } else {
+                    "На странице серии нет плеера"
+                },
+            )
 
-        val playerHeaders = headers.newBuilder().set("Referer", episodeUrl).build()
+        val playerHeaders = headers.newBuilder()
+            .set("Referer", episodeUrl)
+            .set("Origin", baseUrl)
+            .build()
         val playerPage = client.newCall(GET(playerUrl, playerHeaders)).awaitSuccess().bodyText()
 
+        // Playerjs получает список дорожек в base64: "[480p]https://…m3u8,[720p]https://…m3u8".
         val payload = ATOB_REGEX.find(playerPage)?.groupValues?.get(1)
             ?: throw Exception("Плеер не вернул список дорожек")
 
-        val file = String(Base64.decode(payload, Base64.DEFAULT))
+        val decoded = String(Base64.decode(payload, Base64.DEFAULT))
 
-        val videos = FILE_ENTRY_REGEX.findAll(file)
+        val videoHeaders = headers.newBuilder().set("Referer", playerUrl).build()
+        val videos = FILE_ENTRY_REGEX.findAll(decoded)
             .mapNotNull { match ->
                 val label = match.groupValues[1].trim()
                 val link = match.groupValues[2].trim().toAbsoluteUrl()
-                if (link.isEmpty()) return@mapNotNull null
+                if (link.isEmpty() || !link.contains(".m3u8")) return@mapNotNull null
 
-                Video(link, label.toQualityLabel(), link, headers = playerHeaders)
+                Video(link, label.toQualityLabel(), link, headers = videoHeaders)
             }
             .distinctBy { it.videoUrl }
             .toList()
@@ -148,6 +168,27 @@ class AnimRu : AnimeHttpLegacySource() {
     }
 
     // =============================== Utils ================================
+
+    /** Плеер на сайте отдаётся с разных хостов (armdb.org, intrdb.com), поэтому ищем по пути /player/. */
+    private fun findPlayerUrl(html: String): String? {
+        val doc = Jsoup.parse(html, baseUrl)
+
+        doc.selectFirst("iframe#activeplayer")?.let { frame ->
+            val src = frame.attr("src").ifBlank { frame.attr("data-src") }
+            if (src.contains("/player/")) return src.toAbsoluteUrl()
+        }
+
+        doc.select("iframe[src*=/player/]").firstOrNull()?.let { return it.attr("src").toAbsoluteUrl() }
+
+        // Закомментированная разметка DLE тоже содержит адрес плеера.
+        return PLAYER_ANY_REGEX.find(html)?.groupValues?.get(1)?.toAbsoluteUrl()
+    }
+
+    private fun fallbackPlayerUrl(episode: SEpisode): String? =
+        PAGE_SLUG_REGEX.find(episode.url)?.groupValues?.get(1)?.let { "$baseUrl/$it" }
+
+    private fun isBlocked(html: String): Boolean =
+        "Just a moment" in html || "Attention Required" in html || "cf-browser-verification" in html
 
     private fun pageUrl(path: String, page: Int): String = if (page <= 1) {
         "$baseUrl$path"
@@ -216,7 +257,8 @@ class AnimRu : AnimeHttpLegacySource() {
 
         private val SERIES_REGEX = Regex("""(\d+)""")
         private val POST_REGEX = Regex("""^/\d+-[^/]+\.html""")
-        private val PLAYER_REGEX = Regex("""src="(https?://[^"]*armdb\.org/player/[^"]+)"""")
+        private val PLAYER_ANY_REGEX = Regex("""(https?://[a-zA-Z0-9.-]+/player/\d+[^\s"'<>]*)""")
+        private val PAGE_SLUG_REGEX = Regex("""/page-\d+-(.+)$""")
         private val ATOB_REGEX = Regex("""atob\("([A-Za-z0-9+/=]+)"\)""")
         private val FILE_ENTRY_REGEX = Regex("""\[([^\]]+)\]([^,\[]+)""")
         private val QUALITY_REGEX = Regex("""(\d{3,4})p""")
