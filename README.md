@@ -46,7 +46,7 @@ https://raw.githubusercontent.com/ilyuzorpyramur-glitch/aniyomi-ru-anime-repo/ma
 
 ## 📖 Каталог источников
 
-AniLibria · AniMedia · AniMakima · Animedia · AnimeGO · Animesss · AnimeVost · AniSprout · BLDub · DoramaLend · DoramyClub · Justsu · JutsuNet · Kinogo · LakornMania · LordFilm · TVigle · YummyAnime · Mega Porno
+AniLibria · AniMedia · AniMakima · Animedia · AnimeGO · Animesss · AnimeVost · AniSprout · BLDub · DoramaLend · DoramyClub · Justsu · JutsuNet · Kinogo · LakornMania · LordFilm · TVigle · YummyAnime · Mega Porno · Animeru
 
 *Полный актуальный список — в [`index.json`](index.json).*
 
