@@ -186,8 +186,9 @@ class MegaPorno : AnimeHttpLegacySource() {
     private fun Response.parseDocument(): Document = Jsoup.parse(bodyText(), baseUrl)
 
     private fun Response.bodyText(): String {
-        val bytes = body?.bytes() ?: return ""
-        val charset = contentType()?.charset()?.takeIf { it.name() != "UTF-8" } ?: WINDOWS_1251
+        val bytes = peekBody(Long.MAX_VALUE).bytes()
+        val head = String(bytes, 0, minOf(bytes.size, 2048), Charsets.ISO_8859_1).lowercase()
+        val charset = if ("charset=utf-8" in head || "charset=\"utf-8\"" in head) Charsets.UTF_8 else WINDOWS_1251
         return String(bytes, charset)
     }
 
