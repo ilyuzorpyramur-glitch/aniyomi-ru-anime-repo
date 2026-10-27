@@ -15,8 +15,7 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.nio.charset.Charset
 
-class MegaPorno :
-    AnimeHttpLegacySource() {
+class MegaPorno : AnimeHttpLegacySource() {
 
     override val name = "Mega Porno"
 
