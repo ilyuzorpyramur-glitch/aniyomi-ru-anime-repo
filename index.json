@@ -126,6 +126,24 @@
     ]
   },
   {
+    "name": "Aniyomi: Animeru",
+    "pkg": "eu.kanade.tachiyomi.animeextension.all.animru",
+    "apk": "aniyomi-all.animru-v14.1.apk",
+    "lang": "all",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "Animeru",
+        "lang": "ru",
+        "id": "1735499531447874728",
+        "baseUrl": "https://anim-ru.net",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: Animevost",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.animevost",
     "apk": "aniyomi-ru.animevost-v14.13.apk",
