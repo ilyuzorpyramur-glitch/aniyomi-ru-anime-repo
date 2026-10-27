@@ -128,16 +128,20 @@ class AnimRu :
         val doc = response.parseDocument()
         val titlePath = response.request.url.encodedPath
 
+        // Номер берём из адреса страницы (/page-N-slug.html), а не из подписи option:
+        // у сайта именно page-N = N-я серия (проверено по заголовку плеера), тогда как
+        // подписи в селекте могут идти в другом порядке — из-за этого серии «зеркалились».
         val episodes = doc.select("select.sel_page option[value*=/page-]").mapNotNull { option ->
             val path = option.attr("value").trim().takeIf { it.startsWith("/") } ?: return@mapNotNull null
-            val number = SERIES_REGEX.find(option.text())?.groupValues?.get(1)?.toIntOrNull() ?: 0
+            val number = PAGE_NUMBER_REGEX.find(path)?.groupValues?.get(1)?.toIntOrNull()
+                ?: return@mapNotNull null
 
             SEpisode.create().apply {
-                // Страницы /page-1-*.html не существует: первая серия живёт по адресу тайтла,
-                // но с отдельным url, чтобы приложение не путало её с самим тайтлом.
-                url = if (number <= 1) "$titlePath?ep=1" else path
-                name = option.text().trim()
-                episode_number = if (number <= 1) 1f else number.toFloat()
+                // Страницы /page-1-*.html не существует, первая серия отдаётся по адресу тайтла.
+                // Якорь оставляет url уникальным для приложения, но не уходит в запрос.
+                url = if (number <= 1) "$titlePath#ep-1" else path
+                name = "Серия $number"
+                episode_number = number.toFloat()
             }
         }.distinctBy { it.url }
 
@@ -145,7 +149,7 @@ class AnimRu :
 
         return listOf(
             SEpisode.create().apply {
-                url = "$titlePath?ep=1"
+                url = "$titlePath#ep-1"
                 name = "Серия 1"
                 episode_number = 1f
             },
@@ -308,7 +312,7 @@ class AnimRu :
 
         private val WINDOWS_1251 = java.nio.charset.Charset.forName("windows-1251")
 
-        private val SERIES_REGEX = Regex("""(\d+)""")
+        private val PAGE_NUMBER_REGEX = Regex("""/page-(\d+)-""")
         private val POST_REGEX = Regex("""^/\d+-[^/]+\.html""")
         private val RATING_REGEX = Regex("""width:\s*(\d+)%""")
         private val PLAYER_ANY_REGEX = Regex("""(https?://[a-zA-Z0-9.-]+/player/\d+[^\s"'<>]*)""")
