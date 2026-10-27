@@ -11,9 +11,9 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.awaitSuccess
 import keiyoushi.utils.AnimeHttpLegacySource
-import kotlinx.coroutines.runBlocking
 import keiyoushi.utils.addListPreference
 import keiyoushi.utils.getPreferencesLazy
+import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
