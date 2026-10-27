@@ -187,6 +187,24 @@
     ]
   },
   {
+    "name": "Aniyomi: DomAnime",
+    "pkg": "eu.kanade.tachiyomi.animeextension.all.domanime",
+    "apk": "aniyomi-all.domanime-v14.1.apk",
+    "lang": "all",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "ДомАниме",
+        "lang": "ru",
+        "id": "4108792129260426960",
+        "baseUrl": "https://domanime.ru",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: DoramaLend",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.doramalend",
     "apk": "aniyomi-ru.doramalend-v14.1.apk",
