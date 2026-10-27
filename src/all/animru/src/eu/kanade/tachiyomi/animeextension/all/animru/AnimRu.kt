@@ -11,6 +11,7 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.awaitSuccess
 import keiyoushi.utils.AnimeHttpLegacySource
+import kotlinx.coroutines.runBlocking
 import keiyoushi.utils.addListPreference
 import keiyoushi.utils.getPreferencesLazy
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -44,25 +45,25 @@ class AnimRu :
     // страниц и сортируем карточки по рейтингу, который отдаёт сам сайт.
     override fun popularAnimeRequest(page: Int): Request = GET(pageUrl("/home/", page * POPULAR_PAGES), headers)
 
-    override suspend fun popularAnimeParse(response: Response): AnimesPage {
-        val firstPage = response.parseDocument().cards()
-        val collected = firstPage.toMutableList()
-
+    override fun popularAnimeParse(response: Response): AnimesPage = runBlocking {
+        val cards = response.parseDocument().cards().toMutableList()
         val startPage = response.request.url.toString().pageNumber()
-        if (firstPage.isNotEmpty()) {
+
+        if (cards.isNotEmpty()) {
             for (extra in 1 until POPULAR_PAGES) {
-                val doc = client.newCall(GET(pageUrl("/home/", startPage + extra), headers))
+                val extraPage = client.newCall(GET(pageUrl("/home/", startPage + extra), headers))
                     .awaitSuccess()
                     .parseDocument()
-                collected += doc.cards()
+                    .cards()
+                cards += extraPage
             }
         }
 
-        val sorted = collected
-            .distinctBy { it.url }
+        val sorted = cards
+            .distinctBy { it.anime.url }
             .sortedWith(compareByDescending<Card> { it.rating })
 
-        return AnimesPage(sorted.map { it.anime }, sorted.size >= ITEMS_PER_PAGE)
+        AnimesPage(sorted.map { it.anime }, sorted.size >= ITEMS_PER_PAGE)
     }
 
     // =============================== Latest ===============================
