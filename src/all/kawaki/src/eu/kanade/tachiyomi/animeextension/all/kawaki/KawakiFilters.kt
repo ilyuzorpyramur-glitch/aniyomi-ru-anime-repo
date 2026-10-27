@@ -63,7 +63,7 @@ object KawakiFilters {
 
     private val YEARS = listOf("Все") + (2026 downTo 1990).map { it.toString() }
 
-    private val STATUSES = listOf("Все", "Онгоинг" to "ONGOING", "Завершён" to "FINISHED")
+    private val STATUSES = listOf("Все" to "", "Онгоинг" to "ONGOING", "Завершён" to "FINISHED")
 
     class GenreFilter : AnimeFilter.Select<String>("Жанр", GENRES.toTypedArray(), 0)
 
