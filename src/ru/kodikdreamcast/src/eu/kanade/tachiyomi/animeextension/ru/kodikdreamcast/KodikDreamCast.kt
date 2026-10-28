@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.animeextension.ru.kodikdreamcast
 
+import android.util.Base64
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
@@ -8,17 +9,16 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.awaitSuccess
+import java.io.ByteArrayOutputStream
+import java.nio.charset.StandardCharsets
 import keiyoushi.utils.AnimeHttpLegacySource
 import keiyoushi.utils.bodyString
 import okhttp3.FormBody
 import okhttp3.Request
 import okhttp3.Response
 import org.json.JSONArray
-import org.jsoup.Jsoup
 import org.json.JSONObject
-import java.io.ByteArrayOutputStream
-import java.nio.charset.StandardCharsets
-import android.util.Base64
+import org.jsoup.Jsoup
 
 /**
  * Dream Cast — официальный сайт озвучки.
@@ -70,8 +70,7 @@ class KodikDreamCast : AnimeHttpLegacySource() {
 
     // =============================== Search ===============================
 
-    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request =
-        catalogRequest(page, query)
+    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request = catalogRequest(page, query)
 
     override fun searchAnimeParse(response: Response): AnimesPage = catalogParse(response)
 
