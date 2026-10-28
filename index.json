@@ -421,6 +421,24 @@
     ]
   },
   {
+    "name": "Aniyomi: SENU Project",
+    "pkg": "eu.kanade.tachiyomi.animeextension.ru.senu",
+    "apk": "aniyomi-ru.senu-v14.1.apk",
+    "lang": "ru",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "SENU Project",
+        "lang": "ru",
+        "id": "7615827653801207218",
+        "baseUrl": "https://senu.pro",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: Tvigle",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.tvigle",
     "apk": "aniyomi-ru.tvigle-v14.3.apk",
