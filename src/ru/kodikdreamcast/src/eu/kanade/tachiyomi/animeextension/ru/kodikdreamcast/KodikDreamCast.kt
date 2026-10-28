@@ -9,8 +9,6 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.awaitSuccess
-import java.io.ByteArrayOutputStream
-import java.nio.charset.StandardCharsets
 import keiyoushi.utils.AnimeHttpLegacySource
 import keiyoushi.utils.bodyString
 import okhttp3.FormBody
@@ -19,6 +17,8 @@ import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
+import java.io.ByteArrayOutputStream
+import java.nio.charset.StandardCharsets
 
 /**
  * Dream Cast — официальный сайт озвучки.
@@ -86,24 +86,34 @@ class KodikDreamCast : AnimeHttpLegacySource() {
     }
 
     private fun catalogParse(response: Response): AnimesPage {
-        val data = response.parseAs<HomeResponse>()
-        val animes = data.releases.map { release ->
+        val root = JSONObject(response.bodyString())
+        val array = root.optJSONArray("releases") ?: JSONArray()
+        val animes = (0 until array.length()).mapNotNull { index ->
+            val item = array.optJSONObject(index) ?: return@mapNotNull null
+            val url = item.optString("url")
+            if (url.isBlank()) return@mapNotNull null
             SAnime.create().apply {
-                url = release.url
-                title = release.russian.ifBlank { release.original }
-                thumbnail_url = release.image.toAbsolute()
-                genre = release.genres
+                this.url = url
+                title = item.optString("russian").ifBlank { item.optString("original") }
+                thumbnail_url = item.optString("image").toAbsolute()
+                genre = item.optString("genres")
                 description = buildString {
-                    if (release.original.isNotBlank()) appendLine("Оригинал: ${release.original}")
-                    if (release.dateissue.isNotBlank()) appendLine("Год: ${release.dateissue}")
-                    if (release.type.isNotBlank()) appendLine("Тип: ${release.type}")
-                    if (release.studio.isNotBlank()) appendLine("Студия: ${release.studio}")
-                    if (release.dubbers.isNotBlank()) appendLine("Озвучивание: ${release.dubbers}")
-                    if (release.series.isNotBlank()) appendLine("Эпизодов: ${release.currentSeries} из ${release.series}")
+                    val original = item.optString("original")
+                    if (original.isNotBlank()) appendLine("Оригинал: $original")
+                    val year = item.optString("dateissue")
+                    if (year.isNotBlank()) appendLine("Год: $year")
+                    val kind = item.optString("type")
+                    if (kind.isNotBlank()) appendLine("Тип: $kind")
+                    val studio = item.optString("studio")
+                    if (studio.isNotBlank()) appendLine("Студия: $studio")
+                    val dubbers = item.optString("dubbers")
+                    if (dubbers.isNotBlank()) appendLine("Озвучка: $dubbers")
+                    val total = item.optString("series")
+                    if (total.isNotBlank()) appendLine("Эпизодов: ${item.optString("currentSeries")} из $total")
                 }.trim()
             }
         }
-        return AnimesPage(animes, animes.size >= PAGE_SIZE)
+        return AnimesPage(animes, array.length() >= PAGE_SIZE)
     }
 
     // =========================== Anime Details ============================
