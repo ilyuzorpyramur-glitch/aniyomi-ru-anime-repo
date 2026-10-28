@@ -129,22 +129,6 @@ class AniStar :
 
     override fun getFilterList(): AnimeFilterList = AniStarFilters.FILTER_LIST
 
-    private fun searchUrl(query: String, filters: AnimeFilterList): String {
-        val year = filters.filterIsInstance<AniStarFilters.YearFilter>().firstOrNull()?.state ?: 0
-        val genre = filters.filterIsInstance<AniStarFilters.GenreFilter>().firstOrNull()?.state ?: 0
-
-        if (query.isNotBlank()) {
-            return "$baseUrl/index.php?do=xfsearch&xf=${query.encoded()}"
-        }
-        if (genre > 0) {
-            return "$baseUrl${AniStarFilters.GENRES[genre - 1].second}"
-        }
-        if (year > 0) {
-            return "$baseUrl/index.php?do=xfsearch&xf=${AniStarFilters.YEARS[year - 1]}&type=year&r=anime"
-        }
-        return popularAnimeRequest(1).url.toString()
-    }
-
     // ============================ List parsing ============================
 
     private fun listParse(response: Response): AnimesPage = try {
