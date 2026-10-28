@@ -54,7 +54,7 @@ class KodikDreamCast : AnimeHttpLegacySource() {
         headers.newBuilder()
             .set("Referer", "$baseUrl/")
             .set("Origin", baseUrl)
-            .removeHeader("X-Requested-With")
+            .removeAll("X-Requested-With")
             .build()
     }
 
