@@ -6,7 +6,6 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
-import eu.kanade.tachiyomi.network.awaitSuccess
 import keiyoushi.utils.AnimeHttpLegacySource
 import keiyoushi.utils.bodyString
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -191,8 +190,7 @@ class SenuProject : AnimeHttpLegacySource() {
         val date: String,
         val description: String,
     ) {
-        fun matches(query: String): Boolean =
-            title.contains(query, ignoreCase = true) || description.contains(query, ignoreCase = true)
+        fun matches(query: String): Boolean = title.contains(query, ignoreCase = true) || description.contains(query, ignoreCase = true)
     }
 
     companion object {
