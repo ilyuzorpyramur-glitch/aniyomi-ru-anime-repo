@@ -32,14 +32,11 @@ object KodikDreamCastFilters {
 
     class OrderFilter : AnimeFilter.Select<String>("Порядок", arrayOf("По убыванию", "По возрастанию"), 0)
 
-    class GenreFilter(genres: List<String>) :
-        AnimeFilter.Group<AnimeFilter.CheckBox>("Жанры", genres.map { AnimeFilter.CheckBox(it) })
+    class GenreFilter(genres: List<String>) : AnimeFilter.Group<AnimeFilter.CheckBox>("Жанры", genres.map { AnimeFilter.CheckBox(it) })
 
-    class YearFilter(years: List<Int>) :
-        AnimeFilter.Select<String>("Год", (listOf("Любой") + years.map { it.toString() }).toTypedArray(), 0)
+    class YearFilter(years: List<Int>) : AnimeFilter.Select<String>("Год", (listOf("Любой") + years.map { it.toString() }).toTypedArray(), 0)
 
-    class CountryFilter(countries: List<String>) :
-        AnimeFilter.Select<String>("Страна", (listOf("Любая") + countries).toTypedArray(), 0)
+    class CountryFilter(countries: List<String>) : AnimeFilter.Select<String>("Страна", (listOf("Любая") + countries).toTypedArray(), 0)
 
     data class SearchParams(
         val sort: String = SORTS[0].second,
