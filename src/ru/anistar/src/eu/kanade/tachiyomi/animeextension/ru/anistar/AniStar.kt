@@ -68,8 +68,7 @@ class AniStar :
 
     override fun popularAnimeParse(response: Response): AnimesPage = listParse(response)
 
-    private fun popularUrl(page: Int): String =
-        if (page <= 1) "$baseUrl/filter/rating/" else "$baseUrl/filter/rating//page/$page/"
+    private fun popularUrl(page: Int): String = if (page <= 1) "$baseUrl/filter/rating/" else "$baseUrl/filter/rating//page/$page/"
 
     // =============================== Latest ===============================
 
