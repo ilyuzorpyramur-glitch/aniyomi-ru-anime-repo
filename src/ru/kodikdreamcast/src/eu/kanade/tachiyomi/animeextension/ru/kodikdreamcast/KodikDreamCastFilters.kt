@@ -30,11 +30,9 @@ object KodikDreamCastFilters {
 
     class CheckBoxVal(name: String) : AnimeFilter.CheckBox(name)
 
-    open class CheckBoxGroup(name: String, values: List<CheckBoxVal>) :
-        AnimeFilter.Group<AnimeFilter.CheckBox>(name, values)
+    open class CheckBoxGroup(name: String, values: List<CheckBoxVal>) : AnimeFilter.Group<AnimeFilter.CheckBox>(name, values)
 
-    open class SelectFilter(name: String, values: Array<String>, state: Int = 0) :
-        AnimeFilter.Select<String>(name, values, state)
+    open class SelectFilter(name: String, values: Array<String>, state: Int = 0) : AnimeFilter.Select<String>(name, values, state)
 
     class SortFilter : SelectFilter("Сортировка", SORTS.map { it.first }.toTypedArray(), 0)
 
@@ -42,11 +40,9 @@ object KodikDreamCastFilters {
 
     class GenreFilter(genres: List<String>) : CheckBoxGroup("Жанры", genres.map { CheckBoxVal(it) })
 
-    class YearFilter(years: List<Int>) :
-        SelectFilter("Год", (listOf("Любой") + years.map { it.toString() }).toTypedArray(), 0)
+    class YearFilter(years: List<Int>) : SelectFilter("Год", (listOf("Любой") + years.map { it.toString() }).toTypedArray(), 0)
 
-    class CountryFilter(countries: List<String>) :
-        SelectFilter("Страна", (listOf("Любая") + countries).toTypedArray(), 0)
+    class CountryFilter(countries: List<String>) : SelectFilter("Страна", (listOf("Любая") + countries).toTypedArray(), 0)
 
     data class SearchParams(
         val sort: String = SORTS[0].second,
