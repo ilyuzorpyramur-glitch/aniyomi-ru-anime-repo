@@ -48,6 +48,10 @@ class AniStar :
 
     private val preferences by getPreferencesLazy()
 
+    private var pendingQuery: String = ""
+
+    private var pendingParams: AniStarFilters.SearchParams? = null
+
     override fun headersBuilder() = super.headersBuilder()
         .set(
             "User-Agent",
@@ -78,9 +82,51 @@ class AniStar :
 
     // =============================== Search ===============================
 
-    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request = GET(searchUrl(query, filters), headers)
+    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
+        val params = AniStarFilters.getSearchParameters(filters)
+        pendingQuery = query
+        pendingParams = params
+        return GET(searchUrls(query, params, page).first(), headers)
+    }
 
-    override fun searchAnimeParse(response: Response): AnimesPage = listParse(response)
+    override fun searchAnimeParse(response: Response): AnimesPage {
+        val query = pendingQuery
+        val params = pendingParams ?: AniStarFilters.SearchParams()
+        val urls = searchUrls(query, params, 1)
+
+        val first = listParse(response)
+        if (urls.size <= 1) return first
+
+        val merged = LinkedHashMap<String, SAnime>()
+        first.animes.forEach { merged[it.url] = it }
+        urls.drop(1).forEach { url ->
+            runCatching {
+                client.newCall(GET(url, headers)).execute().use { extra ->
+                    listParse(extra).animes.forEach { merged.putIfAbsent(it.url, it) }
+                }
+            }
+        }
+        return AnimesPage(merged.values.toList(), false)
+    }
+
+    private fun searchUrls(query: String, params: AniStarFilters.SearchParams, page: Int): List<String> {
+        if (query.isNotBlank()) {
+            return listOf("$baseUrl/index.php?do=xfsearch&xf=${query.encoded()}")
+        }
+        val urls = mutableListOf<String>()
+        params.genres.forEach { path ->
+            urls += if (page <= 1) "$baseUrl$path" else "$baseUrl${path}page/$page/"
+        }
+        if (urls.isEmpty()) {
+            params.years.forEach { year ->
+                urls += "$baseUrl/index.php?do=xfsearch&xf=$year&type=year&r=anime"
+            }
+        }
+        if (urls.isEmpty()) {
+            urls += if (params.sort == "rating") popularUrl(page) else "$baseUrl/page/$page/"
+        }
+        return urls
+    }
 
     override fun getFilterList(): AnimeFilterList = AniStarFilters.FILTER_LIST
 
@@ -270,37 +316,4 @@ class AniStar :
         private val EPISODE_REGEX = Regex("""title:"([^"]*)",[\s\S]{0,600}?file:"([^"]+)"""")
         private val RESOLUTION_REGEX = Regex("""RESOLUTION=\d+x(\d+)""")
     }
-}
-
-object AniStarFilters {
-
-    class YearFilter : AnimeFilter.Select<String>("Год", YEARS_TITLES, 0)
-
-    class GenreFilter : AnimeFilter.Select<String>("Жанр", GENRE_TITLES, 0)
-
-    val FILTER_LIST: AnimeFilterList
-        get() = AnimeFilterList(YearFilter(), GenreFilter())
-
-    val YEARS: List<String> = (2026 downTo 2000).map { it.toString() }
-
-    private val YEARS_TITLES = arrayOf("Любой") + YEARS.toTypedArray()
-
-    val GENRES: List<Pair<String, String>> = listOf(
-        "Экшен" to "/anime/action/",
-        "Комедия" to "/anime/comedy/",
-        "Романтика" to "/anime/romance/",
-        "Фэнтези" to "/anime/fantasy/",
-        "Драма" to "/anime/drama/",
-        "Сёнен" to "/anime/seinen/",
-        "Меха" to "/anime/mecha/",
-        "Ужасы" to "/anime/horror/",
-        "Детектив" to "/anime/detective/",
-        "Приключения" to "/anime/adventure/",
-        "Фантастика" to "/anime/sci-fi/",
-        "Повседневность" to "/anime/slice-of-life/",
-        "Спорт" to "/anime/sport/",
-        "Исторический" to "/anime/historical/",
-    )
-
-    private val GENRE_TITLES = arrayOf("Любой") + GENRES.map { it.first }.toTypedArray()
 }
