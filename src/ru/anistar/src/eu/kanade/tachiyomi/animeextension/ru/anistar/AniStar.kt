@@ -123,7 +123,8 @@ class AniStar :
             }
         }.distinctBy { it.url }
 
-        return AnimesPage(items, items.size >= PAGE_SIZE)
+        val hasNext = items.size >= PAGE_SIZE && !response.request.url.encodedPath.startsWith("/filter/rating")
+        return AnimesPage(items, hasNext)
     }
 
     // =========================== Anime Details ============================
