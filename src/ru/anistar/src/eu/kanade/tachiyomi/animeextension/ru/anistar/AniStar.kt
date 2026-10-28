@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.animeextension.ru.anistar
 
+import android.util.Log
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
@@ -99,7 +100,14 @@ class AniStar :
 
     // ============================ List parsing ============================
 
-    private fun listParse(response: Response): AnimesPage {
+    private fun listParse(response: Response): AnimesPage = try {
+        parseList(response)
+    } catch (e: Throwable) {
+        Log.e("AniStar", "listParse " + response.request.url + " code=" + response.code, e)
+        throw e
+    }
+
+    private fun parseList(response: Response): AnimesPage {
         val document = Jsoup.parse(response.bodyCp1251(), baseUrl)
         val items = document.select("div#dle-content div.news").mapNotNull { card ->
             val link = card.selectFirst("div.news_header a[href]") ?: return@mapNotNull null
