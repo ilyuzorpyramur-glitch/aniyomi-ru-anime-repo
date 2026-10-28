@@ -91,15 +91,13 @@ class KodikDreamCast :
 
     // ============================== Popular ===============================
 
-    override fun popularAnimeRequest(page: Int): Request =
-        listRequest(page, "kinopoisk_rating", KodikDreamCastFilters.SearchParams(sort = "kinopoisk_rating"))
+    override fun popularAnimeRequest(page: Int): Request = listRequest(page, "kinopoisk_rating", KodikDreamCastFilters.SearchParams(sort = "kinopoisk_rating"))
 
     override fun popularAnimeParse(response: Response): AnimesPage = listParse(response)
 
     // =============================== Latest ===============================
 
-    override fun latestUpdatesRequest(page: Int): Request =
-        listRequest(page, "updated_at", KodikDreamCastFilters.SearchParams(sort = "updated_at"))
+    override fun latestUpdatesRequest(page: Int): Request = listRequest(page, "updated_at", KodikDreamCastFilters.SearchParams(sort = "updated_at"))
 
     override fun latestUpdatesParse(response: Response): AnimesPage = listParse(response)
 
