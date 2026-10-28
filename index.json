@@ -331,6 +331,24 @@
     ]
   },
   {
+    "name": "Aniyomi: Kodik: Dream Cast",
+    "pkg": "eu.kanade.tachiyomi.animeextension.ru.kodikdreamcast",
+    "apk": "aniyomi-ru.kodikdreamcast-v14.1.apk",
+    "lang": "ru",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "Kodik: Dream Cast",
+        "lang": "ru",
+        "id": "4248262391087981297",
+        "baseUrl": "https://kodik-api.com",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: LakornMania",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.lakornmania",
     "apk": "aniyomi-ru.lakornmania-v14.2.apk",
