@@ -243,17 +243,17 @@
   {
     "name": "Aniyomi: Dream Cast",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.kodikdreamcast",
-    "apk": "aniyomi-ru.kodikdreamcast-v14.2.apk",
+    "apk": "aniyomi-ru.kodikdreamcast-v14.3.apk",
     "lang": "ru",
-    "code": 2,
-    "version": "14.2",
+    "code": 3,
+    "version": "14.3",
     "nsfw": 0,
     "sources": [
       {
         "name": "Dream Cast",
         "lang": "ru",
         "id": "8653388773812155069",
-        "baseUrl": "https://kodik-api.com",
+        "baseUrl": "https://dreamerscast.com",
         "versionId": 1
       }
     ]
