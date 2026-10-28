@@ -64,9 +64,12 @@ class AniStar :
 
     // ============================== Popular ===============================
 
-    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/filter/rating/page/$page/", headers)
+    override fun popularAnimeRequest(page: Int): Request = GET(popularUrl(page), headers)
 
     override fun popularAnimeParse(response: Response): AnimesPage = listParse(response)
+
+    private fun popularUrl(page: Int): String =
+        if (page <= 1) "$baseUrl/filter/rating/" else "$baseUrl/filter/rating//page/$page/"
 
     // =============================== Latest ===============================
 
