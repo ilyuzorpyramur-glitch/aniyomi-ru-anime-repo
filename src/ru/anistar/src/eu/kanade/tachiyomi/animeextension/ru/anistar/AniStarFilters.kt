@@ -5,11 +5,9 @@ import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 
 object AniStarFilters {
 
-    class CheckBoxVal(name: String, val value: String, state: Boolean = false) :
-        AnimeFilter.CheckBox(name, state)
+    class CheckBoxVal(name: String, val value: String, state: Boolean = false) : AnimeFilter.CheckBox(name, state)
 
-    open class CheckBoxGroup(name: String, values: List<CheckBoxVal>) :
-        AnimeFilter.Group<AnimeFilter.CheckBox>(name, values)
+    open class CheckBoxGroup(name: String, values: List<CheckBoxVal>) : AnimeFilter.Group<AnimeFilter.CheckBox>(name, values)
 
     class GenresFilter : CheckBoxGroup("Жанры", GENRES.map { CheckBoxVal(it.first, it.second) })
 
