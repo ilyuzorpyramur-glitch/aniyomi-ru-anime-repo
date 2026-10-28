@@ -33,7 +33,9 @@ import java.net.URLEncoder
  * Плеер:      /test/player2/videoas.php?id=<id>&hash=<hash> (jwplayer, playlst[])
  * Видео:      /test/player2/playlist_hls.php?... -> master.m3u8 (360/720)
  */
-class AniStar : AnimeHttpLegacySource(), ConfigurableAnimeSource {
+class AniStar :
+    AnimeHttpLegacySource(),
+    ConfigurableAnimeSource {
 
     override val name = "AniStar"
 
@@ -73,8 +75,7 @@ class AniStar : AnimeHttpLegacySource(), ConfigurableAnimeSource {
 
     // =============================== Search ===============================
 
-    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request =
-        GET(searchUrl(query, filters), headers)
+    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request = GET(searchUrl(query, filters), headers)
 
     override fun searchAnimeParse(response: Response): AnimesPage = listParse(response)
 
