@@ -38,7 +38,7 @@ class KodikDreamCast :
     AnimeHttpLegacySource(),
     ConfigurableAnimeSource {
 
-    override val name = "Kodik: Dream Cast"
+    override val name = "Dream Cast"
 
     override val baseUrl = "https://kodik-api.com"
 
@@ -49,8 +49,11 @@ class KodikDreamCast :
     private val preferences by getPreferencesLazy()
 
     private val token: String
-        get() = preferences.getString(PREF_TOKEN, DEFAULT_TOKEN).orEmpty().trim()
-            .ifBlank { DEFAULT_TOKEN }
+        get() = preferences.getString(PREF_TOKEN, "").orEmpty().trim()
+
+    private fun requireToken(): String = token.ifBlank {
+        throw Exception("Укажите токен в настройках расширения «Dream Cast»")
+    }
 
     private val playerHeaders = Headers.Builder()
         .set("Referer", "$PLAYER_HOST/")
@@ -88,36 +91,23 @@ class KodikDreamCast :
 
     // ============================== Popular ===============================
 
-    override fun popularAnimeRequest(page: Int): Request = listRequest(page, "kinopoisk_rating", KodikDreamCastFilters.SearchParams())
+    override fun popularAnimeRequest(page: Int): Request =
+        listRequest(page, "kinopoisk_rating", KodikDreamCastFilters.SearchParams(sort = "kinopoisk_rating"))
 
     override fun popularAnimeParse(response: Response): AnimesPage = listParse(response)
 
     // =============================== Latest ===============================
 
-    override fun latestUpdatesRequest(page: Int): Request = listRequest(page, "updated_at", KodikDreamCastFilters.SearchParams())
+    override fun latestUpdatesRequest(page: Int): Request =
+        listRequest(page, "updated_at", KodikDreamCastFilters.SearchParams(sort = "updated_at"))
 
     override fun latestUpdatesParse(response: Response): AnimesPage = listParse(response)
 
     // =============================== Search ===============================
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
-        if (query.isNotBlank()) {
-            val url = baseUrl.toHttpUrl().newBuilder()
-                .addPathSegment("search")
-                .addQueryParameter("token", token)
-                .addQueryParameter("title", query)
-                .addQueryParameter("translation_id", TRANSLATION_ID)
-                .addQueryParameter("limit", PAGE_SIZE.toString())
-                .addQueryParameter("offset", ((page - 1) * PAGE_SIZE).toString())
-                .addQueryParameter("strict", "false")
-                .addQueryParameter("full_match", "false")
-                .addQueryParameter("with_material_data", "true")
-                .build()
-            return GET(url, headers)
-        }
-
         val params = KodikDreamCastFilters.getSearchParameters(filters)
-        return listRequest(page, params.sort, params)
+        return listRequest(page, params.sort, params, query)
     }
 
     override fun searchAnimeParse(response: Response): AnimesPage = listParse(response)
@@ -144,21 +134,23 @@ class KodikDreamCast :
         val multiSeason = seasons.size > 1
         val episodes = mutableListOf<SEpisode>()
 
+        val seen = HashSet<String>()
+
         seasons.forEach { (seasonKey, season) ->
             val seasonNumber = seasonKey.toIntOrNull() ?: 0
             season.episodes.entries
                 .sortedBy { it.key.toIntOrNull() ?: 0 }
                 .forEach { (episodeKey, link) ->
-                    if (link.isBlank()) return@forEach
+                    if (link.isBlank() || !seen.add(link)) return@forEach
                     val number = episodeKey.toIntOrNull() ?: (episodes.size + 1)
                     episodes += SEpisode.create().apply {
                         url = link
-                        episode_number = number.toFloat()
+                        episode_number = if (multiSeason) seasonNumber * 1000f + number else number.toFloat()
                         name = buildString {
                             if (multiSeason) append("Сезон $seasonNumber, ")
                             append("Серия $number")
                         }
-                        scanlator = title.translation?.title ?: "Dream Cast"
+                        scanlator = title.translation?.title
                     }
                 }
         }
@@ -200,10 +192,11 @@ class KodikDreamCast :
         page: Int,
         defaultSort: String,
         params: KodikDreamCastFilters.SearchParams,
+        query: String = "",
     ): Request {
         val url = baseUrl.toHttpUrl().newBuilder()
             .addPathSegment("list")
-            .addQueryParameter("token", token)
+            .addQueryParameter("token", requireToken())
             .addQueryParameter("translation_id", TRANSLATION_ID)
             .addQueryParameter("types", "anime,anime-serial")
             .addQueryParameter("with_material_data", "true")
@@ -215,7 +208,8 @@ class KodikDreamCast :
             .addQueryParameter("sort", params.sort.ifBlank { defaultSort })
             .addQueryParameter("order", params.order.ifBlank { "desc" })
             .apply {
-                params.genres.forEach { addQueryParameter("genres", it) }
+                if (query.isNotBlank()) addQueryParameter("title", query)
+                if (params.genres.isNotEmpty()) addQueryParameter("genres", params.genres.joinToString(","))
                 if (params.year > 0) addQueryParameter("year", params.year.toString())
                 if (params.country.isNotBlank()) addQueryParameter("countries", params.country)
             }
@@ -226,7 +220,7 @@ class KodikDreamCast :
     private fun detailRequest(id: String): Request = GET(
         baseUrl.toHttpUrl().newBuilder()
             .addPathSegment("search")
-            .addQueryParameter("token", token)
+            .addQueryParameter("token", requireToken())
             .addQueryParameter("id", id)
             .addQueryParameter("translation_id", TRANSLATION_ID)
             .addQueryParameter("limit", "1")
@@ -239,7 +233,7 @@ class KodikDreamCast :
 
     private fun refUrl(path: String) = baseUrl.toHttpUrl().newBuilder()
         .addPathSegment(path)
-        .addQueryParameter("token", token)
+        .addQueryParameter("token", requireToken())
         .build()
 
     private fun fetchRefItems(path: String): List<KodikRefItem> = runCatching {
@@ -305,10 +299,10 @@ class KodikDreamCast :
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
         screen.addEditTextPreference(
             key = PREF_TOKEN,
-            default = DEFAULT_TOKEN,
+            default = "",
             title = "Токен Kodik API",
-            summary = "Токен приложения, снятый с AniLabX. Меняйте, если API начнёт отвечать ошибкой.",
-            dialogMessage = "Пустое поле возвращает встроенный токен.",
+            summary = "Без токена источник не работает. Узнайте токен у автора репозитория.",
+            dialogMessage = "Токен не хранится в коде расширения — только в настройках на устройстве.",
             restartRequired = true,
         )
     }
@@ -318,7 +312,6 @@ class KodikDreamCast :
         private const val PAGE_SIZE = 30
         private const val PLAYER_HOST = "https://kodikplayer.com"
         private const val PREF_TOKEN = "kodik_api_token"
-        private const val DEFAULT_TOKEN = "REMOVED"
         private const val MAX_GENRES = 48
         private const val MAX_COUNTRIES = 30
         private val SHIFT_ORDER = listOf(18) + (1..25).filter { it != 18 }
