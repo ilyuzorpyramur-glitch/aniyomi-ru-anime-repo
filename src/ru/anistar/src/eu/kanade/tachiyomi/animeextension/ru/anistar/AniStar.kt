@@ -121,8 +121,7 @@ class AniStar :
             }
         }.distinctBy { it.url }
 
-        val hasNext = document.select("a[href*=/page/]").any { it.text().contains("След", ignoreCase = true) }
-        return AnimesPage(items, items.isNotEmpty() && hasNext)
+        return AnimesPage(items, items.size >= PAGE_SIZE)
     }
 
     // =========================== Anime Details ============================
@@ -262,6 +261,8 @@ class AniStar :
     companion object {
         private const val PREF_QUALITY = "pref_quality"
         private const val PREF_QUALITY_DEFAULT = "0"
+
+        private const val PAGE_SIZE = 10
 
         private val EPISODE_REGEX = Regex("""title:"([^"]*)",[\s\S]{0,600}?file:"([^"]+)"""")
         private val RESOLUTION_REGEX = Regex("""RESOLUTION=\d+x(\d+)""")
