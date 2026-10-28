@@ -1,318 +1,282 @@
 package eu.kanade.tachiyomi.animeextension.ru.kodikdreamcast
 
-import android.util.Base64
-import androidx.preference.PreferenceScreen
-import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
+import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.awaitSuccess
 import keiyoushi.utils.AnimeHttpLegacySource
-import keiyoushi.utils.addEditTextPreference
-import keiyoushi.utils.getPreferencesLazy
-import keiyoushi.utils.parseAs
-import kotlinx.coroutines.runBlocking
-import okhttp3.Headers
-import okhttp3.HttpUrl.Companion.toHttpUrl
+import keiyoushi.utils.bodyString
+import okhttp3.FormBody
 import okhttp3.Request
 import okhttp3.Response
+import org.json.JSONArray
+import org.jsoup.Jsoup
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.nio.charset.StandardCharsets
+import android.util.Base64
 
 /**
- * Dream Cast (Kodik) as a standalone source.
+ * Dream Cast — официальный сайт озвучки.
  *
- * The app-side parser `kdk_dream_cast` only wraps the public Kodik API with a
- * fixed `translation_id`, so the extension talks to the API directly:
+ * Каталог и поиск: POST /home (pageNumber, pageSize, search) → JSON {count, releases}.
+ * Страница релиза: HTML + inline `new Playerjs("#2<base64>")`; внутри base64-блока
+ * массив `file[]` с сериями, где на каждую серию есть DASH и HLS (master.m3u8).
  *
- *   /list    -> catalog of anime/anime-serial for translation 1978
- *   /search  -> title search and full card data (seasons + episodes)
- *   /ftor    -> per-episode playlist links, obfuscated with a rotating shift
- *
- * The playlist `src` is base64 after a Caesar shift inside each alphabet; the
- * shift changes, so every candidate is tried until a URL decodes (see
- * [decodeSource]).
+ * Токены не используются: всё берётся с сайта. Сайт доступен из РФ; из ЕС/США
+ * отдаёт 404 (гео-блок), поэтому источник рассчитан на российские сети.
  */
-class KodikDreamCast :
-    AnimeHttpLegacySource(),
-    ConfigurableAnimeSource {
+class KodikDreamCast : AnimeHttpLegacySource() {
 
     override val name = "Dream Cast"
 
-    override val baseUrl = "https://kodik-api.com"
+    override val baseUrl = "https://dreamerscast.com"
 
     override val lang = "ru"
 
-    override val supportsLatest = true
+    override val supportsLatest = false
 
-    private val preferences by getPreferencesLazy()
+    override fun headersBuilder() = super.headersBuilder()
+        .set(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+                "Chrome/124.0.0.0 Safari/537.36",
+        )
+        .set("Referer", "$baseUrl/home")
+        .set("Origin", baseUrl)
+        .set("X-Requested-With", "XMLHttpRequest")
 
-    private val token: String
-        get() = preferences.getString(PREF_TOKEN, "").orEmpty().trim()
-
-    private fun requireToken(): String = token.ifBlank {
-        throw Exception("Укажите токен в настройках расширения «Dream Cast»")
-    }
-
-    private val playerHeaders = Headers.Builder()
-        .set("Referer", "$PLAYER_HOST/")
-        .set("Origin", PLAYER_HOST)
-        .build()
-
-    private val genres: List<String> by lazy {
-        val items = fetchRefItems("genres")
-        if (items.isEmpty()) {
-            KodikDreamCastFilters.FALLBACK_GENRES
-        } else {
-            items.sortedByDescending { it.count }
-                .map { it.title }
-                .filter { it.isNotBlank() }
-                .take(MAX_GENRES)
-        }
-    }
-
-    private val countries: List<String> by lazy {
-        fetchRefItems("countries")
-            .sortedByDescending { it.count }
-            .map { it.title }
-            .filter { it.isNotBlank() }
-            .take(MAX_COUNTRIES)
-    }
-
-    private val years: List<Int> by lazy {
-        runCatching {
-            runBlocking {
-                client.newCall(GET(refUrl("years"), headers)).awaitSuccess()
-                    .parseAs<KodikYearsResponse>().results.map { it.year }
-            }
-        }.getOrElse { emptyList() }
+    private val videoHeaders by lazy {
+        headers.newBuilder()
+            .set("Referer", "$baseUrl/")
+            .set("Origin", baseUrl)
+            .removeHeader("X-Requested-With")
+            .build()
     }
 
     // ============================== Popular ===============================
 
-    override fun popularAnimeRequest(page: Int): Request = listRequest(page, "kinopoisk_rating", KodikDreamCastFilters.SearchParams(sort = "kinopoisk_rating"))
+    override fun popularAnimeRequest(page: Int): Request = catalogRequest(page, "")
 
-    override fun popularAnimeParse(response: Response): AnimesPage = listParse(response)
+    override fun popularAnimeParse(response: Response): AnimesPage = catalogParse(response)
 
-    // =============================== Latest ===============================
+    override fun latestUpdatesRequest(page: Int): Request = catalogRequest(page, "")
 
-    override fun latestUpdatesRequest(page: Int): Request = listRequest(page, "updated_at", KodikDreamCastFilters.SearchParams(sort = "updated_at"))
-
-    override fun latestUpdatesParse(response: Response): AnimesPage = listParse(response)
+    override fun latestUpdatesParse(response: Response): AnimesPage = catalogParse(response)
 
     // =============================== Search ===============================
 
-    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
-        val params = KodikDreamCastFilters.getSearchParameters(filters)
-        return listRequest(page, params.sort, params, query)
+    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request =
+        catalogRequest(page, query)
+
+    override fun searchAnimeParse(response: Response): AnimesPage = catalogParse(response)
+
+    override fun getFilterList(): AnimeFilterList = AnimeFilterList()
+
+    private fun catalogRequest(page: Int, query: String): Request {
+        val body = FormBody.Builder()
+            .add("pageNumber", page.toString())
+            .add("pageSize", PAGE_SIZE.toString())
+            .apply { if (query.isNotBlank()) add("search", query) }
+            .build()
+        return POST("$baseUrl/home", headers, body)
     }
 
-    override fun searchAnimeParse(response: Response): AnimesPage = listParse(response)
-
-    override fun getFilterList(): AnimeFilterList = KodikDreamCastFilters.getFilterList(genres, years, countries)
+    private fun catalogParse(response: Response): AnimesPage {
+        val data = response.parseAs<HomeResponse>()
+        val animes = data.releases.map { release ->
+            SAnime.create().apply {
+                url = release.url
+                title = release.russian.ifBlank { release.original }
+                thumbnail_url = release.image.toAbsolute()
+                genre = release.genres
+                description = buildString {
+                    if (release.original.isNotBlank()) appendLine("Оригинал: ${release.original}")
+                    if (release.dateissue.isNotBlank()) appendLine("Год: ${release.dateissue}")
+                    if (release.type.isNotBlank()) appendLine("Тип: ${release.type}")
+                    if (release.studio.isNotBlank()) appendLine("Студия: ${release.studio}")
+                    if (release.dubbers.isNotBlank()) appendLine("Озвучивание: ${release.dubbers}")
+                    if (release.series.isNotBlank()) appendLine("Эпизодов: ${release.currentSeries} из ${release.series}")
+                }.trim()
+            }
+        }
+        return AnimesPage(animes, animes.size >= PAGE_SIZE)
+    }
 
     // =========================== Anime Details ============================
 
-    override fun animeDetailsRequest(anime: SAnime): Request = detailRequest(anime.url)
+    override fun animeDetailsRequest(anime: SAnime): Request = GET(baseUrl + anime.url, headers)
 
     override fun animeDetailsParse(response: Response): SAnime {
-        val title = response.parseAs<KodikListResponse>().results.firstOrNull()
-            ?: throw Exception("Тайтл не найден в Kodik")
-        return title.toSAnime().apply { initialized = true }
+        val document = response.bodyString().let(Jsoup::parse)
+        val release = parseRelease(document)
+        return SAnime.create().apply {
+            url = response.request.url.encodedPath
+            title = release.title
+            thumbnail_url = release.thumbnail
+            description = release.description
+            genre = release.genre
+            initialized = true
+        }
     }
 
     // ============================== Episodes ==============================
 
-    override fun episodeListRequest(anime: SAnime): Request = detailRequest(anime.url)
+    override fun episodeListRequest(anime: SAnime): Request = GET(baseUrl + anime.url, headers)
 
     override fun episodeListParse(response: Response): List<SEpisode> {
-        val title = response.parseAs<KodikListResponse>().results.firstOrNull() ?: return emptyList()
-        val seasons = title.seasons.entries.sortedBy { it.key.toIntOrNull() ?: 0 }
-        val multiSeason = seasons.size > 1
-        val episodes = mutableListOf<SEpisode>()
-
-        val seen = HashSet<String>()
-
-        seasons.forEach { (seasonKey, season) ->
-            val seasonNumber = seasonKey.toIntOrNull() ?: 0
-            season.episodes.entries
-                .sortedBy { it.key.toIntOrNull() ?: 0 }
-                .forEach { (episodeKey, link) ->
-                    if (link.isBlank() || !seen.add(link)) return@forEach
-                    val number = episodeKey.toIntOrNull() ?: (episodes.size + 1)
-                    episodes += SEpisode.create().apply {
-                        url = link
-                        episode_number = if (multiSeason) seasonNumber * 1000f + number else number.toFloat()
-                        name = buildString {
-                            if (multiSeason) append("Сезон $seasonNumber, ")
-                            append("Серия $number")
-                        }
-                        scanlator = title.translation?.title
-                    }
-                }
+        val html = response.bodyString()
+        val episodes = parsePlayerEpisodes(html)
+        return episodes.mapIndexed { index, item ->
+            SEpisode.create().apply {
+                url = item.url
+                episode_number = (index + 1).toFloat()
+                name = item.title.ifBlank { "Серия ${index + 1}" }
+                scanlator = "Dream Cast"
+            }
         }
-
-        return episodes
     }
 
     // =============================== Video ================================
 
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
-        val playerUrl = if (episode.url.startsWith("//")) "https:${episode.url}" else episode.url
-        val segments = playerUrl.toHttpUrl().pathSegments
-        val type = segments.getOrNull(0) ?: "seria"
-        val id = segments.getOrNull(1) ?: return emptyList()
-        val hash = segments.getOrNull(2) ?: return emptyList()
-
-        val request = GET(
-            "$PLAYER_HOST/ftor".toHttpUrl().newBuilder()
-                .addQueryParameter("type", type)
-                .addQueryParameter("id", id)
-                .addQueryParameter("hash", hash)
-                .build(),
-            playerHeaders,
-        )
-
-        val body = client.newCall(request).awaitSuccess().parseAs<KodikFtorResponse>()
-        return body.links.entries
-            .sortedByDescending { it.key.toIntOrNull() ?: 0 }
-            .mapNotNull { (quality, links) ->
-                val source = links.firstOrNull()?.src?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                val playlist = decodeSource(source) ?: return@mapNotNull null
-                Video(playlist, "${quality}p", playlist, headers = playerHeaders)
-            }
+        val master = client.newCall(GET(episode.url, videoHeaders)).awaitSuccess().bodyString()
+        val variants = parseMasterPlaylist(master, episode.url)
+        if (variants.isNotEmpty()) return variants
+        return listOf(Video(episode.url, "HLS", episode.url, headers = videoHeaders))
     }
-
-    // ============================== Requests ==============================
-
-    private fun listRequest(
-        page: Int,
-        defaultSort: String,
-        params: KodikDreamCastFilters.SearchParams,
-        query: String = "",
-    ): Request {
-        val url = baseUrl.toHttpUrl().newBuilder()
-            .addPathSegment("list")
-            .addQueryParameter("token", requireToken())
-            .addQueryParameter("translation_id", TRANSLATION_ID)
-            .addQueryParameter("types", "anime,anime-serial")
-            .addQueryParameter("with_material_data", "true")
-            .addQueryParameter("with_seasons", "false")
-            .addQueryParameter("with_episodes", "false")
-            .addQueryParameter("with_page_links", "false")
-            .addQueryParameter("limit", PAGE_SIZE.toString())
-            .addQueryParameter("offset", ((page - 1) * PAGE_SIZE).toString())
-            .addQueryParameter("sort", params.sort.ifBlank { defaultSort })
-            .addQueryParameter("order", params.order.ifBlank { "desc" })
-            .apply {
-                if (query.isNotBlank()) addQueryParameter("title", query)
-                if (params.genres.isNotEmpty()) addQueryParameter("genres", params.genres.joinToString(","))
-                if (params.year > 0) addQueryParameter("year", params.year.toString())
-                if (params.country.isNotBlank()) addQueryParameter("countries", params.country)
-            }
-            .build()
-        return GET(url, headers)
-    }
-
-    private fun detailRequest(id: String): Request = GET(
-        baseUrl.toHttpUrl().newBuilder()
-            .addPathSegment("search")
-            .addQueryParameter("token", requireToken())
-            .addQueryParameter("id", id)
-            .addQueryParameter("translation_id", TRANSLATION_ID)
-            .addQueryParameter("limit", "1")
-            .addQueryParameter("with_seasons", "true")
-            .addQueryParameter("with_episodes", "true")
-            .addQueryParameter("with_material_data", "true")
-            .build(),
-        headers,
-    )
-
-    private fun refUrl(path: String) = baseUrl.toHttpUrl().newBuilder()
-        .addPathSegment(path)
-        .addQueryParameter("token", requireToken())
-        .build()
-
-    private fun fetchRefItems(path: String): List<KodikRefItem> = runCatching {
-        runBlocking {
-            client.newCall(GET(refUrl(path), headers)).awaitSuccess()
-                .parseAs<KodikRefResponse>().results
-        }
-    }.getOrElse { emptyList() }
 
     // ============================== Parsing ===============================
 
-    private fun listParse(response: Response): AnimesPage {
-        val body = response.parseAs<KodikListResponse>()
-        val animes = body.results.map { it.toSAnime() }
-        return AnimesPage(animes, animes.size >= PAGE_SIZE)
-    }
+    private data class ReleaseInfo(
+        val title: String,
+        val thumbnail: String?,
+        val description: String?,
+        val genre: String?,
+    )
 
-    private fun KodikTitle.toSAnime(): SAnime = SAnime.create().apply {
-        url = id
-        title = material_data?.title ?: material_data?.anime_title ?: title
-        thumbnail_url = material_data?.poster_url ?: material_data?.anime_poster_url
-        description = material_data?.anime_description ?: material_data?.description
-        genre = (material_data?.anime_genres ?: emptyList())
-            .ifEmpty { material_data?.genres ?: emptyList() }
+    private fun parseRelease(document: org.jsoup.nodes.Document): ReleaseInfo {
+        val title = document.selectFirst("meta[property=og:title]")?.attr("content")
+            ?.takeIf { it.isNotBlank() }
+            ?: document.selectFirst("h1")?.text()?.trim().orEmpty()
+
+        val thumbnail = document.selectFirst("meta[property=og:image]")?.attr("content")
+            ?.takeIf { it.isNotBlank() }
+            ?.toAbsolute()
+
+        val description = document.selectFirst("meta[name=description]")?.attr("content")
+            ?.takeIf { it.isNotBlank() && it.length > 40 }
+            ?: document.selectFirst("meta[property=og:description]")?.attr("content")
+
+        val genre = document.select("a[href*=/home/genre/]")
+            .map { it.text().trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
             .joinToString()
-        status = when (material_data?.anime_status) {
-            "released" -> SAnime.COMPLETED
-            "ongoing" -> SAnime.ONGOING
-            else -> SAnime.UNKNOWN
-        }
+            .ifBlank { null }
+
+        return ReleaseInfo(title, thumbnail, description, genre)
     }
 
-    // ============================ Deobfuscation ===========================
+    private data class ParsedEpisode(val title: String, val url: String)
 
     /**
-     * The player returns `src` as a Caesar-shifted base64 string. The shift
-     * rotates over time, so candidates are tried until one decodes into a URL.
+     * Playerjs config is a chain of independent base64 chunks (padding in the middle),
+     * so decode chunk by chunk and concatenate the bytes.
      */
-    private fun decodeSource(encoded: String): String? {
-        for (shift in SHIFT_ORDER) {
-            val rotated = encoded.rotate(shift)
-            val padded = rotated.padBase64()
-            val decoded = DECODE_FLAGS.mapNotNull { flags ->
-                runCatching { String(Base64.decode(padded, flags), Charsets.UTF_8) }.getOrNull()
+    private fun parsePlayerEpisodes(html: String): List<ParsedEpisode> {
+        val encoded = PLAYERJS_REGEX.find(html)?.groupValues?.get(1) ?: return emptyList()
+        val bytes = decodeChunks(encoded)
+        if (bytes.isEmpty()) return emptyList()
+
+        val ascii = String(bytes, StandardCharsets.ISO_8859_1)
+        val titles = TITLE_REGEX.findAll(ascii)
+            .map { decodeMojibake(it.groupValues[1]) }
+            .toList()
+
+        val hlsUrls = HLS_REGEX.findAll(ascii)
+            .map { it.value }
+            .distinct()
+            .toList()
+            .ifEmpty {
+                DASH_REGEX.findAll(ascii)
+                    .map { it.value.replace("/dash/", "/hls/") + HLS_SUFFIX }
+                    .distinct()
+                    .toList()
             }
-            decoded.firstOrNull { it.startsWith("http") || it.startsWith("//") }?.let { return it }
+
+        return hlsUrls.mapIndexed { index, url ->
+            ParsedEpisode(titles.getOrNull(index).orEmpty(), url)
         }
-        return null
     }
 
-    private fun String.rotate(shift: Int): String = map { char ->
-        when {
-            char in 'a'..'z' -> 'a' + (char - 'a' + shift) % 26
-            char in 'A'..'Z' -> 'A' + (char - 'A' + shift) % 26
-            else -> char
+    private fun decodeChunks(encoded: String): ByteArray {
+        val out = ByteArrayOutputStream()
+        var start = 0
+        var i = 0
+        while (i < encoded.length) {
+            if (encoded[i] == '=') {
+                var j = i
+                while (j < encoded.length && encoded[j] == '=') j++
+                val chunk = encoded.substring(start, j)
+                runCatching { out.write(Base64.decode(chunk, Base64.DEFAULT)) }
+                start = j
+                i = j
+            } else {
+                i++
+            }
         }
-    }.joinToString("")
+        if (start < encoded.length) {
+            runCatching { out.write(Base64.decode(encoded.substring(start), Base64.DEFAULT)) }
+        }
+        return out.toByteArray()
+    }
 
-    private fun String.padBase64(): String = this + "=".repeat((4 - length % 4) % 4)
+    private fun decodeMojibake(value: String): String = runCatching {
+        String(value.toByteArray(StandardCharsets.ISO_8859_1), StandardCharsets.UTF_8)
+    }.getOrDefault(value)
 
-    // ============================== Settings ==============================
+    private fun parseMasterPlaylist(master: String, fallback: String): List<Video> {
+        val lines = master.lines()
+        val videos = mutableListOf<Video>()
+        var pendingQuality: String? = null
+        lines.forEach { line ->
+            val trimmed = line.trim()
+            when {
+                trimmed.startsWith("#EXT-X-STREAM-INF") -> {
+                    pendingQuality = RESOLUTION_REGEX.find(trimmed)
+                        ?.groupValues
+                        ?.getOrNull(2)
+                        ?.let { "${it}p" }
+                }
+                trimmed.isNotEmpty() && !trimmed.startsWith("#") && pendingQuality != null -> {
+                    videos += Video(trimmed, pendingQuality!!, trimmed, headers = videoHeaders)
+                    pendingQuality = null
+                }
+            }
+        }
+        return videos.ifEmpty {
+            if (master.startsWith("#EXTM3U")) listOf(Video(fallback, "HLS", fallback, headers = videoHeaders)) else emptyList()
+        }
+    }
 
-    override fun setupPreferenceScreen(screen: PreferenceScreen) {
-        screen.addEditTextPreference(
-            key = PREF_TOKEN,
-            default = "",
-            title = "Токен Kodik API",
-            summary = "Без токена источник не работает. Узнайте токен у автора репозитория.",
-            dialogMessage = "Токен не хранится в коде расширения — только в настройках на устройстве.",
-            restartRequired = true,
-        )
+    private fun String.toAbsolute(): String = when {
+        startsWith("//") -> "https:$this"
+        startsWith("/") -> baseUrl + this
+        else -> this
     }
 
     companion object {
-        private const val TRANSLATION_ID = "1978"
         private const val PAGE_SIZE = 30
-        private const val PLAYER_HOST = "https://kodikplayer.com"
-        private const val PREF_TOKEN = "kodik_api_token"
-        private const val MAX_GENRES = 48
-        private const val MAX_COUNTRIES = 30
-        private val SHIFT_ORDER = listOf(18) + (1..25).filter { it != 18 }
-        private val DECODE_FLAGS = listOf(Base64.DEFAULT, Base64.URL_SAFE)
+        private const val HLS_SUFFIX = "_,1080,720,low,aac,.mp4.urlset/master.m3u8"
+        private val PLAYERJS_REGEX = Regex("""new Playerjs\("#2([A-Za-z0-9+/=]+)"""")
+        private val TITLE_REGEX = Regex(""""title":"([^"]{1,60})"""")
+        private val HLS_REGEX = Regex("""https://play\.dreamerscast\.com/hls/[A-Za-z0-9\-]+/[A-Za-z0-9\-]+""")
+        private val DASH_REGEX = Regex("""https://play\.dreamerscast\.com/dash/[A-Za-z0-9\-]+/[A-Za-z0-9\-]+""")
+        private val RESOLUTION_REGEX = Regex("""RESOLUTION=(\d+)x(\d+)""")
     }
 }

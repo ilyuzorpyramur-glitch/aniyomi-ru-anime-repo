@@ -1,7 +1,7 @@
 ext {
     extName = 'Dream Cast'
     extClass = '.KodikDreamCast'
-    extVersionCode = 2
+    extVersionCode = 3
     isNsfw = false
 }
 
