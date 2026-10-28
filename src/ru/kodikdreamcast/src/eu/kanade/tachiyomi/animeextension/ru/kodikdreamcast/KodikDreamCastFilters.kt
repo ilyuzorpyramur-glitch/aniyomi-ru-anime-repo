@@ -28,15 +28,25 @@ object KodikDreamCastFilters {
         "сёдзё",
     )
 
-    class SortFilter : AnimeFilter.Select<String>("Сортировка", SORTS.map { it.first }.toTypedArray(), 0)
+    class CheckBoxVal(name: String) : AnimeFilter.CheckBox(name)
 
-    class OrderFilter : AnimeFilter.Select<String>("Порядок", arrayOf("По убыванию", "По возрастанию"), 0)
+    open class CheckBoxGroup(name: String, values: List<CheckBoxVal>) :
+        AnimeFilter.Group<AnimeFilter.CheckBox>(name, values)
 
-    class GenreFilter(genres: List<String>) : AnimeFilter.Group<AnimeFilter.CheckBox>("Жанры", genres.map { AnimeFilter.CheckBox(it) })
+    open class SelectFilter(name: String, values: Array<String>, state: Int = 0) :
+        AnimeFilter.Select<String>(name, values, state)
 
-    class YearFilter(years: List<Int>) : AnimeFilter.Select<String>("Год", (listOf("Любой") + years.map { it.toString() }).toTypedArray(), 0)
+    class SortFilter : SelectFilter("Сортировка", SORTS.map { it.first }.toTypedArray(), 0)
 
-    class CountryFilter(countries: List<String>) : AnimeFilter.Select<String>("Страна", (listOf("Любая") + countries).toTypedArray(), 0)
+    class OrderFilter : SelectFilter("Порядок", arrayOf("По убыванию", "По возрастанию"), 0)
+
+    class GenreFilter(genres: List<String>) : CheckBoxGroup("Жанры", genres.map { CheckBoxVal(it) })
+
+    class YearFilter(years: List<Int>) :
+        SelectFilter("Год", (listOf("Любой") + years.map { it.toString() }).toTypedArray(), 0)
+
+    class CountryFilter(countries: List<String>) :
+        SelectFilter("Страна", (listOf("Любая") + countries).toTypedArray(), 0)
 
     data class SearchParams(
         val sort: String = SORTS[0].second,
