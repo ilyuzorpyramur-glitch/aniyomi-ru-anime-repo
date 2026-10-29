@@ -2,10 +2,10 @@
   {
     "name": "Aniyomi: AniDub",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.anidub",
-    "apk": "aniyomi-ru.anidub-v14.8.apk",
+    "apk": "aniyomi-ru.anidub-v14.9.apk",
     "lang": "ru",
-    "code": 8,
-    "version": "14.8",
+    "code": 9,
+    "version": "14.9",
     "nsfw": 0,
     "sources": [
       {
