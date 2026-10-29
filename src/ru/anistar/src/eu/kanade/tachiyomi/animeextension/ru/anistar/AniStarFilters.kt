@@ -9,15 +9,18 @@ object AniStarFilters {
 
     open class CheckBoxGroup(name: String, values: List<CheckBoxVal>) : AnimeFilter.Group<AnimeFilter.CheckBox>(name, values)
 
-    class GenresFilter : CheckBoxGroup("Жанры", GENRES.map { CheckBoxVal(it.first, it.second) })
+    class GenresFilter(includeNsfw: Boolean = false) : CheckBoxGroup(
+        "Жанры",
+        GENRES.map { CheckBoxVal(it.first, it.second) } +
+            if (includeNsfw) NSFW_GENRES.map { CheckBoxVal(it.first, it.second) } else emptyList(),
+    )
 
     class YearsFilter : CheckBoxGroup("Годы", YEARS.map { CheckBoxVal(it, it) })
 
-    val FILTER_LIST: AnimeFilterList
-        get() = AnimeFilterList(
-            GenresFilter(),
-            YearsFilter(),
-        )
+    fun filterList(includeNsfw: Boolean): AnimeFilterList = AnimeFilterList(
+        GenresFilter(includeNsfw),
+        YearsFilter(),
+    )
 
     data class SearchParams(
         val genres: List<String> = emptyList(),
@@ -37,6 +40,12 @@ object AniStarFilters {
             years = filters.firstOrNullAs<YearsFilter>()?.selected().orEmpty(),
         )
     }
+
+    val NSFW_GENRES: List<Pair<String, String>> = listOf(
+        "Хентай" to "/hentai/",
+        "Хентай 3D" to "/hentai/3d/",
+        "Хентай без цензуры" to "/hentai/uncensored/",
+    )
 
     val GENRES: List<Pair<String, String>> = listOf(
         "Экшен" to "/anime/action/",

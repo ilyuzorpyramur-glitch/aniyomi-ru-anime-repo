@@ -1,7 +1,7 @@
 package eu.kanade.tachiyomi.animeextension.ru.anistar
 
 import android.util.Log
-import androidx.preference.EditTextPreference
+import androidx.preference.SwitchPreferenceCompat
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
@@ -130,7 +130,8 @@ class AniStar :
         return urls
     }
 
-    override fun getFilterList(): AnimeFilterList = AniStarFilters.FILTER_LIST
+    override fun getFilterList(): AnimeFilterList =
+        AniStarFilters.filterList(preferences?.getBoolean(PREF_NSFW, false) ?: false)
 
     // ============================ List parsing ============================
 
@@ -148,6 +149,10 @@ class AniStar :
             val href = link.absUrl("href").ifBlank { link.attr("href") }
             val titleText = link.text().trim()
             if (href.isBlank() || titleText.isBlank()) return@mapNotNull null
+            val tags = card.select("p.tags a").map { it.text().trim() }
+            val isAdPost = tags.any { it == "Новинки(онгоинги)" } &&
+                tags.none { it != "Новинки(онгоинги)" && it != "Аниме" }
+            if (isAdPost) return@mapNotNull null
             SAnime.create().apply {
                 url = href.substringAfter(baseUrl)
                 title = titleText
@@ -172,9 +177,9 @@ class AniStar :
             title = document.selectFirst("h1")?.text()?.trim().orEmpty()
             thumbnail_url = document.selectFirst("img[itemprop=image]")?.let { imageUrl(it) }
                 ?: document.selectFirst("div.title_left img")?.let { imageUrl(it) }
-            genre = document.select("div.news_header p.tags a[href*=/anime/]")
+            genre = document.select("p.tags a")
                 .map { it.text().trim() }
-                .filter { it.isNotBlank() && !it.equals("Аниме", ignoreCase = true) }
+                .filter { it.isNotBlank() && it !in SERVICE_TAGS }
                 .distinct()
                 .joinToString()
             description = buildString {
@@ -296,8 +301,7 @@ class AniStar :
         val best = ordered.firstOrNull()
         val target = best?.second ?: playlistUrl
         val quality = QUALITY_REGEX.find(target)?.groupValues?.get(1)?.toIntOrNull() ?: 0
-        val dub = dubName.ifBlank { "AniStar" }
-        val label = if (quality > 0) "$dub - ${quality}p" else "$dub - HLS"
+        val label = if (quality > 0) "AniStar - ${quality}p" else "AniStar - HLS"
         listOf(Video(target, label, target, headers = videoHeaders))
     }
 
@@ -343,11 +347,11 @@ class AniStar :
             summary = "%s"
         }.also(screen::addPreference)
 
-        EditTextPreference(screen.context).apply {
-            key = PREF_DUB
-            title = "Озвучка по умолчанию"
-            summary = "Название озвучки с сайта. Пусто — любая доступная"
-            setDefaultValue("")
+        SwitchPreferenceCompat(screen.context).apply {
+            key = PREF_NSFW
+            title = "Показывать NSFW-жанры"
+            summary = "Добавляет разделы для взрослых в фильтр жанров"
+            setDefaultValue(false)
         }.also(screen::addPreference)
     }
 
@@ -373,7 +377,7 @@ class AniStar :
     companion object {
         private const val PREF_QUALITY = "pref_quality"
         private const val PREF_QUALITY_DEFAULT = "0"
-        private const val PREF_DUB = "pref_dub"
+        private const val PREF_NSFW = "pref_nsfw"
 
         private const val PAGE_SIZE = 10
 
@@ -385,6 +389,8 @@ class AniStar :
         private val DUB_REGEX = Regex("""Озвучка:\s*<span[^>]*>\s*([^<]+)""")
 
         private const val DEEP_ENT_PREFIX = "deepent|"
+
+        private val SERVICE_TAGS = setOf("Аниме", "Новинки(онгоинги)")
 
         private val EPISODE_COUNT_REGEX = Regex("""Серии:[^0-9]{0,12}(\d{1,4})""")
 
