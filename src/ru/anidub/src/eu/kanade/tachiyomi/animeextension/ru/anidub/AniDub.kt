@@ -55,13 +55,36 @@ class AniDub :
 
     // ============================== Popular ===============================
 
-    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/anime/page/$page/", headers)
+    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/anime/page/1/", headers)
 
-    override fun popularAnimeParse(response: Response): AnimesPage = listParse(response)
+    override fun popularAnimeParse(response: Response): AnimesPage {
+        val document = Jsoup.parse(response.bodyString(), baseUrl)
+        val inCatalog = document.select("div#dle-content a.th-in[href], div.th-item a.th-in[href]")
+            .mapNotNull { it.absUrl("href").ifBlank { it.attr("href") } }
+            .toSet()
+        val popular = document.select("#owl-popular a.th-in[href]")
+            .mapNotNull { carouselItem(it, inCatalog) }
+            .distinctBy { it.url }
+        if (popular.isNotEmpty()) return AnimesPage(popular, false)
+        return listParse(response)
+    }
+
+    private fun carouselItem(link: Element, allowed: Set<String>): SAnime? {
+        val href = link.absUrl("href").ifBlank { link.attr("href") }
+        if (href.isBlank() || !href.contains("/anime/")) return null
+        if (allowed.isNotEmpty() && href !in allowed) return null
+        val title = link.selectFirst(".th-title")?.text()?.trim().orEmpty()
+        if (title.isBlank()) return null
+        return SAnime.create().apply {
+            url = href.substringAfter(baseUrl)
+            this.title = title
+            thumbnail_url = link.selectFirst("img")?.let { imageUrl(it) }
+        }
+    }
 
     // =============================== Latest ===============================
 
-    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/anime/anime_ongoing/page/$page/", headers)
+    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/anime/page/$page/", headers)
 
     override fun latestUpdatesParse(response: Response): AnimesPage = listParse(response)
 
