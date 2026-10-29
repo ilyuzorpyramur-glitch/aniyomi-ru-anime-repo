@@ -83,7 +83,10 @@ class DeepEntResolver(
         }
 
         val numbers = bodies
-            .flatMap { EPISODE_JSON_REGEX.findAll(it).map { m -> m.groupValues[1].toIntOrNull() } }
+            .flatMap { body ->
+                (EPISODE_JSON_REGEX.findAll(body) + EPISODE_ALT_REGEX.findAll(body))
+                    .map { m -> m.groupValues[1].toIntOrNull() }
+            }
             .filterNotNull()
             .distinct()
             .sorted()
@@ -104,6 +107,8 @@ class DeepEntResolver(
     companion object {
         private val EPISODE_JSON_REGEX = Regex(""""number"\s*:\s*(\d{1,4})""")
 
+        private val EPISODE_ALT_REGEX = Regex(""""episode"\s*:\s*(\d{1,4})""")
+
         private val HOOK_JS = """
             (function(){
               var B = window['%B%'];
@@ -117,6 +122,16 @@ class DeepEntResolver(
                   });
                 };
               }
+              try {
+                var seg = location.pathname.split('/').filter(Boolean)[0] || '';
+                var qs = new URLSearchParams(location.search);
+                var api = '/api/v1/anime/' + seg + '?season=' + (qs.get('season') || '') +
+                          '&partner=' + (qs.get('partner') || '');
+                fetch(api, { headers: { 'accept': 'application/json' } })
+                  .then(function(r){ return r.text(); })
+                  .then(function(t){ if (t) B.capture(t); })
+                  .catch(function(){});
+              } catch (e) {}
               var oo = XMLHttpRequest.prototype.open;
               XMLHttpRequest.prototype.open = function(){
                 this.addEventListener('load', function(){
