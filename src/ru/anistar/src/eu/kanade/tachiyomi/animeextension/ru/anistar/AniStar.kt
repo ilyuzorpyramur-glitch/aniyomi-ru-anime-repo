@@ -222,20 +222,21 @@ class AniStar :
 
         dubName = DUB_REGEX.find(playerPage)?.groupValues?.get(1)?.trim().orEmpty()
 
-        return entries.mapIndexedNotNull { index, (title, file) ->
-            val number = title.trim().let { EPISODE_NUMBER_REGEX.find(it)?.value?.toFloatOrNull() }
-            val isSpecial = SPECIAL_REGEX.containsMatchIn(title)
+        // Specials would shift the numbering and break "Начать"; drop them unless the
+        // release consists of specials only.
+        val regular = entries.filterNot { SPECIAL_REGEX.containsMatchIn(it.first) }
+        val source = regular.ifEmpty { entries }
+
+        return source.mapIndexed { index, (title, file) ->
+            val number = EPISODE_NUMBER_REGEX.find(title)?.value?.toFloatOrNull() ?: (index + 1f)
             SEpisode.create().apply {
                 url = file
                 name = title.ifBlank { "Серия ${index + 1}" }
-                episode_number = when {
-                    isSpecial -> 1000f + (number ?: (index + 1f))
-                    number != null -> number
-                    else -> index + 1f
-                }
+                episode_number = number
                 scanlator = dubName.ifBlank { "AniStar" }
             }
-        }.distinctBy { it.episode_number }.sortedBy { it.episode_number }
+        }.distinctBy { it.episode_number }
+            .sortedByDescending { it.episode_number }
     }
 
     // =============================== Video ================================
