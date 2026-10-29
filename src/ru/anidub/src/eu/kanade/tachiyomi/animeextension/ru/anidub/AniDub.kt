@@ -173,7 +173,7 @@ class AniDub :
                     val href = link.absUrl("href").ifBlank { link.attr("href") }
                     val candidate = normalize(link.selectFirst(".th-title")?.text().orEmpty())
                     href.isNotBlank() && href != direct &&
-                        (candidate == cleanTitle || candidate.contains(cleanTitle) || cleanTitle.contains(candidate))
+                        candidate.length >= 3 && candidate == cleanTitle
                 }?.let { it.absUrl("href").ifBlank { it.attr("href") } }
             }.getOrNull()
             if (found != null) {
