@@ -97,20 +97,19 @@ class KodikExtractor(
         client.newCall(GET(url, kodikHeaders())).awaitSuccess().bodyString()
     }.getOrDefault("")
 
-    private fun parseTranslations(doc: Document): List<Translation> =
-        doc.select("select option[data-media-id]").mapNotNull { option ->
-            val id = option.attr("data-id").ifBlank { option.value() }
-            val mediaId = option.attr("data-media-id")
-            if (id.isBlank() || mediaId.isBlank()) return@mapNotNull null
-            Translation(
-                id = id,
-                title = option.attr("data-title").ifBlank { "Озвучка $id" },
-                mediaType = option.attr("data-media-type"),
-                mediaId = mediaId,
-                mediaHash = option.attr("data-media-hash"),
-                kind = option.attr("data-translation-type"),
-            )
-        }
+    private fun parseTranslations(doc: Document): List<Translation> = doc.select("select option[data-media-id]").mapNotNull { option ->
+        val id = option.attr("data-id").ifBlank { option.value() }
+        val mediaId = option.attr("data-media-id")
+        if (id.isBlank() || mediaId.isBlank()) return@mapNotNull null
+        Translation(
+            id = id,
+            title = option.attr("data-title").ifBlank { "Озвучка $id" },
+            mediaType = option.attr("data-media-type"),
+            mediaId = mediaId,
+            mediaHash = option.attr("data-media-hash"),
+            kind = option.attr("data-translation-type"),
+        )
+    }
 
     private fun requestLinks(
         params: JSONObject,

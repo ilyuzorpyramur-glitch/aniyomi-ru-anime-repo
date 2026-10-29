@@ -19,16 +19,18 @@ import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
-import uy.kohesive.injekt.Injekt
-import uy.kohesive.injekt.api.get
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-class Animka : AnimeHttpSource(), ConfigurableAnimeSource {
+class Animka :
+    AnimeHttpSource(),
+    ConfigurableAnimeSource {
 
     override val name = "Animka"
 

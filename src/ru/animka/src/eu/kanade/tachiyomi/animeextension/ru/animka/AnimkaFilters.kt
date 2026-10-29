@@ -7,33 +7,38 @@ object AnimkaFilters {
 
     class CheckBoxVal(name: String, val value: String, state: Boolean = false) : AnimeFilter.CheckBox(name, state)
 
-    class GenresFilter : AnimeFilter.Group<AnimeFilter.CheckBox>(
-        "Жанры",
-        GENRES.map { (name, value) -> CheckBoxVal(name, value) },
-    )
+    class GenresFilter :
+        AnimeFilter.Group<AnimeFilter.CheckBox>(
+            "Жанры",
+            GENRES.map { (name, value) -> CheckBoxVal(name, value) },
+        )
 
-    class ExcludeGenresFilter : AnimeFilter.Group<AnimeFilter.CheckBox>(
-        "Исключить жанры",
-        GENRES.map { (name, value) -> CheckBoxVal(name, value) },
-    )
+    class ExcludeGenresFilter :
+        AnimeFilter.Group<AnimeFilter.CheckBox>(
+            "Исключить жанры",
+            GENRES.map { (name, value) -> CheckBoxVal(name, value) },
+        )
 
-    class TypeFilter : AnimeFilter.Select<String>(
-        "Тип",
-        arrayOf("Все", "Сериалы", "Фильмы"),
-        0,
-    )
+    class TypeFilter :
+        AnimeFilter.Select<String>(
+            "Тип",
+            arrayOf("Все", "Сериалы", "Фильмы"),
+            0,
+        )
 
-    class StatusFilter : AnimeFilter.Select<String>(
-        "Статус",
-        arrayOf("Все", "Онгоинг", "Завершено"),
-        0,
-    )
+    class StatusFilter :
+        AnimeFilter.Select<String>(
+            "Статус",
+            arrayOf("Все", "Онгоинг", "Завершено"),
+            0,
+        )
 
-    class SortFilter : AnimeFilter.Select<String>(
-        "Сортировка",
-        arrayOf("По умолчанию", "По популярности", "По дате выхода", "По рейтингу", "По году", "По алфавиту"),
-        1,
-    )
+    class SortFilter :
+        AnimeFilter.Select<String>(
+            "Сортировка",
+            arrayOf("По умолчанию", "По популярности", "По дате выхода", "По рейтингу", "По году", "По алфавиту"),
+            1,
+        )
 
     class YearFilter : AnimeFilter.Select<String>("Год", arrayOf("Все годы") + YEARS.toTypedArray(), 0)
 
