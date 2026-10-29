@@ -13,8 +13,6 @@ import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
-import org.jsoup.Jsoup
-import java.net.URI
 
 /**
  * Kodik: страница плеера содержит подписанные параметры (`urlParams`), по ним
