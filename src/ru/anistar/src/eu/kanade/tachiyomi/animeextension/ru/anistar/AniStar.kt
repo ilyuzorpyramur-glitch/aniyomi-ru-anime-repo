@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.animeextension.ru.anistar
 
 import android.util.Log
+import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
@@ -301,6 +302,13 @@ class AniStar :
             setDefaultValue(PREF_QUALITY_DEFAULT)
             summary = "%s"
         }.also(screen::addPreference)
+
+        EditTextPreference(screen.context).apply {
+            key = PREF_DUB
+            title = "Озвучка по умолчанию"
+            summary = "Название озвучки с сайта. Пусто — любая доступная"
+            setDefaultValue("")
+        }.also(screen::addPreference)
     }
 
     // ============================== Helpers ===============================
@@ -325,6 +333,7 @@ class AniStar :
     companion object {
         private const val PREF_QUALITY = "pref_quality"
         private const val PREF_QUALITY_DEFAULT = "0"
+        private const val PREF_DUB = "pref_dub"
 
         private const val PAGE_SIZE = 10
 
