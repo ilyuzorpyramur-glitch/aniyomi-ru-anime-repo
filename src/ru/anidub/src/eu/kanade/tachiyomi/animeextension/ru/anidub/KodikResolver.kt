@@ -1,8 +1,8 @@
 package eu.kanade.tachiyomi.animeextension.ru.anidub
 
 import android.content.SharedPreferences
-import android.util.Log
 import android.util.Base64
+import android.util.Log
 import aniyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
@@ -29,13 +29,19 @@ class KodikResolver(
     suspend fun videos(playerUrl: String): List<Video> {
         val page = runCatching {
             client.newCall(GET(playerUrl, kodikHeaders())).awaitSuccess().bodyString()
-        }.getOrNull() ?: run { Log.e("AniDub", "kodik: page fetch failed"); return emptyList() }
+        }.getOrNull() ?: run {
+            Log.e("AniDub", "kodik: page fetch failed")
+            return emptyList()
+        }
 
         Log.e("AniDub", "kodik page len=" + page.length)
 
         val params = URL_PARAMS_REGEX.find(page)?.groupValues?.get(1)
             ?.let { runCatching { JSONObject(it) }.getOrNull() }
-            ?: run { Log.e("AniDub", "kodik: urlParams not found"); return emptyList() }
+            ?: run {
+                Log.e("AniDub", "kodik: urlParams not found")
+                return emptyList()
+            }
 
         val pd = params.optString("pd")
         Log.e("AniDub", "kodik pd=" + pd)
@@ -62,9 +68,15 @@ class KodikResolver(
 
         val data = runCatching {
             JSONObject(client.newCall(request).awaitSuccess().bodyString())
-        }.getOrNull() ?: run { Log.e("AniDub", "kodik: ftor failed"); return emptyList() }
+        }.getOrNull() ?: run {
+            Log.e("AniDub", "kodik: ftor failed")
+            return emptyList()
+        }
 
-        val links = data.optJSONObject("links") ?: run { Log.e("AniDub", "kodik: no links in ftor"); return emptyList() }
+        val links = data.optJSONObject("links") ?: run {
+            Log.e("AniDub", "kodik: no links in ftor")
+            return emptyList()
+        }
         Log.e("AniDub", "kodik links keys=" + links.keys().asSequence().toList())
         val preferred = preferences.getString(PREF_QUALITY, PREF_QUALITY_DEFAULT) ?: PREF_QUALITY_DEFAULT
 
@@ -73,7 +85,10 @@ class KodikResolver(
             .flatMap { quality ->
                 val src = links.optJSONArray(quality)?.optJSONObject(0)?.optString("src").orEmpty()
                 if (src.isBlank()) return@flatMap emptyList()
-                val url = decode(src) ?: run { Log.e("AniDub", "kodik: decode failed q=$quality"); return@flatMap emptyList() }
+                val url = decode(src) ?: run {
+                    Log.e("AniDub", "kodik: decode failed q=$quality")
+                    return@flatMap emptyList()
+                }
                 Log.e("AniDub", "kodik url=" + url.take(80))
                 runCatching {
                     playlistUtils.extractFromHls(url, videoNameGen = { "AniDub (${quality}p Kodik)" })
