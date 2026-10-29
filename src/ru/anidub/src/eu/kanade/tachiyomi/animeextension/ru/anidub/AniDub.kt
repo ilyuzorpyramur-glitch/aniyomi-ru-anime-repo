@@ -9,7 +9,6 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
-import eu.kanade.tachiyomi.network.awaitSuccess
 import keiyoushi.utils.AnimeHttpLegacySource
 import keiyoushi.utils.bodyString
 import keiyoushi.utils.getPreferencesLazy
@@ -30,7 +29,9 @@ import java.net.URLEncoder
  * Фильтры:  /xfsearch/genre/<жанр>/, /xfsearch/year/<год>/
  * Плеер:    kodikplayer.com/seria/<id>/<hash>/720p (ссылки в span[data] на странице)
  */
-class AniDub : AnimeHttpLegacySource(), ConfigurableAnimeSource {
+class AniDub :
+    AnimeHttpLegacySource(),
+    ConfigurableAnimeSource {
 
     override val name = "AniDub"
 
@@ -66,8 +67,7 @@ class AniDub : AnimeHttpLegacySource(), ConfigurableAnimeSource {
 
     // =============================== Search ===============================
 
-    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request =
-        GET(searchUrl(query, filters), headers)
+    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request = GET(searchUrl(query, filters), headers)
 
     override fun searchAnimeParse(response: Response): AnimesPage = listParse(response)
 
