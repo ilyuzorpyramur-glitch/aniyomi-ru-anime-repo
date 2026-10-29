@@ -45,6 +45,8 @@ class AniDub :
 
     private val kodik by lazy { KodikResolver(client, headers, preferences) }
 
+    @Volatile private var pendingTitle: String = ""
+
     override fun headersBuilder() = super.headersBuilder()
         .set(
             "User-Agent",
@@ -55,9 +57,10 @@ class AniDub :
 
     // ============================== Popular ===============================
 
-    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/anime/page/1/", headers)
+    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/anime/page/$page/", headers)
 
     override fun popularAnimeParse(response: Response): AnimesPage {
+        if (response.request.url.encodedPath != "/anime/page/1/") return listParse(response)
         val document = Jsoup.parse(response.bodyString(), baseUrl)
         val inCatalog = document.select("div#dle-content a.th-in[href], div.th-item a.th-in[href]")
             .mapNotNull { it.absUrl("href").ifBlank { it.attr("href") } }
@@ -65,7 +68,7 @@ class AniDub :
         val popular = document.select("#owl-popular a.th-in[href]")
             .mapNotNull { carouselItem(it, inCatalog) }
             .distinctBy { it.url }
-        if (popular.isNotEmpty()) return AnimesPage(popular, false)
+        if (popular.isNotEmpty()) return AnimesPage(popular, true)
         return listParse(response)
     }
 
@@ -129,7 +132,7 @@ class AniDub :
                         ?.let { imageUrl(it) }
                 }
             }
-            .distinctBy { it.url }
+            .distinctBy { it.url.trimEnd('/').substringBefore('#') }
 
         val hasNext = cards.size >= PAGE_SIZE
         return AnimesPage(cards, cards.isNotEmpty() && hasNext)
@@ -137,9 +140,31 @@ class AniDub :
 
     // =========================== Anime Details ============================
 
-    override fun animeDetailsRequest(anime: SAnime): Request = GET(baseUrl + anime.url, headers)
+    override fun animeDetailsRequest(anime: SAnime): Request {
+        pendingTitle = anime.title
+        return GET(baseUrl + anime.url, headers)
+    }
 
     override fun animeDetailsParse(response: Response): SAnime {
+        if (response.code == 404) {
+            val found = runCatching {
+                val searchUrl = "$baseUrl/?do=search&subaction=search&story=${pendingTitle.encoded()}"
+                val page = Jsoup.parse(
+                    client.newCall(GET(searchUrl, headers)).execute().bodyString(),
+                    baseUrl,
+                )
+                page.select("div.th-item a.th-in[href]").firstOrNull()
+                    ?.absUrl("href")
+            }.getOrNull()
+            if (found != null) {
+                val retry = client.newCall(GET(found, headers)).execute()
+                if (retry.code == 200) return parseDetails(retry)
+            }
+        }
+        return parseDetails(response)
+    }
+
+    private fun parseDetails(response: Response): SAnime {
         val document = Jsoup.parse(response.bodyString(), baseUrl)
         return SAnime.create().apply {
             url = response.request.url.encodedPath
