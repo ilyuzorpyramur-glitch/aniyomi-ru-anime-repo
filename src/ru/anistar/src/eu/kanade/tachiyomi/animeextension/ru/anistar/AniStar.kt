@@ -345,6 +345,8 @@ class AniStar :
 
         private val PLAYER_REGEX = Regex("""(/test/player2/videoas\.php\?id=\d+&(?:amp;)?hash=[A-Za-z0-9]+)""")
 
+        private val EPISODE_NUMBER_REGEX = Regex("""\d+""")
+
         private val EPISODE_REGEX = Regex("""title:"([^"]*)",[\s\S]{0,600}?file:"([^"]+)"""")
         private val DUB_REGEX = Regex("""Озвучка:\s*<span[^>]*>\s*([^<]+)""")
 
