@@ -167,7 +167,9 @@ class Animka :
 
     private fun animeListParse(response: Response): AnimesPage {
         val document = Jsoup.parse(response.bodyString(), baseUrl)
-        val animes = document.select("article.anime-card").mapNotNull { it.toSAnimeOrNull() }
+        val animes = document.select("article.anime-card")
+            .mapNotNull { it.toSAnimeOrNull() }
+            .distinctBy { it.url }
         val hasNext = document.selectFirst("a.page-link[rel=next]") != null
         return AnimesPage(animes, hasNext)
     }
