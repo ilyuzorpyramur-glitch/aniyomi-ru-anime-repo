@@ -229,11 +229,13 @@ class Animka :
     /** Таблица отдаётся с незакрытыми <td>: пробуем пары ячеек, затем сырой HTML. */
     private fun filmMeta(body: String, document: Document, label: String): String {
         val cells = document.select("table.film-meta-table td").map { it.text().trim() }
+        android.util.Log.e("Animka", "meta cells=" + cells.take(8))
         var index = 0
         while (index < cells.size - 1) {
             if (cells[index].equals(label, ignoreCase = true)) return cells[index + 1]
             index++
         }
+        android.util.Log.e("Animka", "meta raw has table=" + body.contains("film-meta-table"))
         val regex = Regex("""<td>\s*${Regex.escape(label)}\s*<td>\s*([^<]*)""", RegexOption.IGNORE_CASE)
         return regex.find(body)?.groupValues?.get(1)?.trim().orEmpty()
     }

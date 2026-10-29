@@ -49,6 +49,7 @@ class KodikExtractor(
 
         val doc = Jsoup.parse(page, playerUrl)
         val translations = parseTranslations(doc)
+        Log.e(TAG, "kodik page=" + page.length + " translations=" + translations.size)
         if (translations.isEmpty()) {
             Log.e(TAG, "озвучки не найдены")
             return emptyList()
@@ -58,6 +59,8 @@ class KodikExtractor(
             .firstOrNull { it.attr("value") == episode.toString() && it.hasAttr("data-hash") }
 
         val ignoreSubs = preferences.getBoolean(PREF_IGNORE_SUBS, true)
+        Log.e(TAG, "kodik episodes options=" + doc.select("select option[data-id][data-hash]").size)
+        Log.e(TAG, "kodik keep=" + translations.joinToString { it.title + "/" + it.mediaType + "/" + it.id })
         val wanted = translations
             .filter { !ignoreSubs || !it.kind.contains("sub", ignoreCase = true) }
             .filter { matchesPreference(it.title) }
@@ -72,7 +75,9 @@ class KodikExtractor(
             val hash = if (isSerial) episodeOption!!.attr("data-hash") else translation.mediaHash
             if (id.isBlank() || hash.isBlank()) continue
 
-            val links = requestLinks(params, translation, id, hash, isSerial) ?: continue
+            val links = requestLinks(params, translation, id, hash, isSerial)
+            Log.e(TAG, "kodik ftor " + translation.title + " id=" + id + " type=" + if (isSerial) "seria" else "video" + " -> " + (links?.keys()?.asSequence()?.toList() ?: "null"))
+            if (links == null) continue
             val sorted = qualities.filter { links.has(it) }.ifEmpty { listOfNotNull(links.keys().asSequence().maxOrNull()) }
             for (quality in sorted) {
                 val src = links.optJSONArray(quality)?.optJSONObject(0)?.optString("src").orEmpty()
