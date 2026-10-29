@@ -68,18 +68,16 @@ class Animka :
         synchronized(guardLock) {
             if (!force && System.currentTimeMillis() - guardCheckedAt < GUARD_TTL_MS) return
             runCatching {
-                var response = client.newCall(GET("$baseUrl/", headers)).execute()
                 var hops = 0
-                while (response.request.url.encodedPath.startsWith(CHALLENGE_PATH) && hops < 3) {
-                    val challengeUrl = response.request.url.toString()
+                while (hops < 4) {
+                    val response = client.newCall(GET("$baseUrl/", headers)).execute()
                     val body = response.body?.string().orEmpty()
+                    val challengeUrl = response.request.url.toString()
                     response.close()
                     val token = TOKEN_REGEX.find(body)?.groupValues?.get(1) ?: break
                     solveChallenge(token, challengeUrl)
-                    response = client.newCall(GET("$baseUrl/", headers)).execute()
                     hops++
                 }
-                response.close()
             }
             guardCheckedAt = System.currentTimeMillis()
         }
@@ -198,7 +196,13 @@ class Animka :
     }
 
     override fun animeDetailsParse(response: Response): SAnime {
-        val document = Jsoup.parse(response.bodyString(), baseUrl)
+        var body = response.bodyString()
+        if (TOKEN_REGEX.containsMatchIn(body)) {
+            ensureGuard(force = true)
+            body = client.newCall(GET(response.request.url.toString(), headers)).execute()
+                .use { it.bodyString() }
+        }
+        val document = Jsoup.parse(body, baseUrl)
         return SAnime.create().apply {
             url = response.request.url.pathSegments.let { parts ->
                 val index = parts.indexOf("anime")
@@ -248,7 +252,13 @@ class Animka :
     }
 
     override fun episodeListParse(response: Response): List<SEpisode> {
-        val document = Jsoup.parse(response.bodyString(), baseUrl)
+        var raw = response.bodyString()
+        if (TOKEN_REGEX.containsMatchIn(raw)) {
+            ensureGuard(force = true)
+            raw = client.newCall(GET(response.request.url.toString(), headers)).execute()
+                .use { it.bodyString() }
+        }
+        val document = Jsoup.parse(raw, baseUrl)
         val slug = response.request.url.pathSegments.let { parts ->
             val index = parts.indexOf("anime")
             if (index >= 0 && parts.size > index + 1) parts[index + 1] else ""
@@ -298,9 +308,12 @@ class Animka :
 
     override suspend fun getVideoList(episode: SEpisode): List<Video> = withContext(Dispatchers.IO) {
         ensureGuard()
-        val response = client.newCall(GET(episode.url, headers)).execute()
-        val document = Jsoup.parse(response.bodyString(), baseUrl)
-        response.close()
+        var page = client.newCall(GET(episode.url, headers)).execute().use { it.bodyString() }
+        if (TOKEN_REGEX.containsMatchIn(page)) {
+            ensureGuard(force = true)
+            page = client.newCall(GET(episode.url, headers)).execute().use { it.bodyString() }
+        }
+        val document = Jsoup.parse(page, baseUrl)
 
         val url = episode.url.toHttpUrl()
         val season = url.queryParameter("s")?.toIntOrNull() ?: 0
