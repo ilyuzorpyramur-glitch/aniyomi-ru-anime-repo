@@ -108,7 +108,7 @@ class KodikExtractor(
         client.newCall(GET(url, kodikHeaders())).awaitSuccess().bodyString()
     }.getOrDefault("")
 
-    private fun parseTranslations(doc: Document): List<Translation> = doc.select("select option[data-media-id]").mapNotNull { option ->
+    private fun parseTranslations(doc: Document): List<Translation> = doc.select("option[data-media-id]").mapNotNull { option ->
         val id = option.attr("data-id").ifBlank { option.attr("value") }
         val mediaId = option.attr("data-media-id")
         if (id.isBlank() || mediaId.isBlank()) return@mapNotNull null
