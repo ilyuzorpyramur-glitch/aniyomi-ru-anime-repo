@@ -99,8 +99,10 @@ class AniDub :
                 SAnime.create().apply {
                     url = href.substringAfter(baseUrl)
                     this.title = title
-                    thumbnail_url = (link.selectFirst("img")
-                        ?: link.parents().firstOrNull { it.hasClass("th-item") }?.selectFirst("img"))
+                    thumbnail_url = (
+                        link.selectFirst("img")
+                            ?: link.parents().firstOrNull { it.hasClass("th-item") }?.selectFirst("img")
+                        )
                         ?.let { imageUrl(it) }
                 }
             }
