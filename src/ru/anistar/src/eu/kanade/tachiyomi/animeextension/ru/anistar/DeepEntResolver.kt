@@ -82,6 +82,10 @@ class DeepEntResolver(
             webView?.destroy()
         }
 
+        runCatching {
+            java.io.File(context.cacheDir, "deepent.jsonl").writeText(bodies.joinToString("\n"))
+        }
+
         val numbers = bodies
             .flatMap { body ->
                 (EPISODE_JSON_REGEX.findAll(body) + EPISODE_ALT_REGEX.findAll(body))
