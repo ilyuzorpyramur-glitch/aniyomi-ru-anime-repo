@@ -51,6 +51,8 @@ class AniStar :
 
     private var pendingParams: AniStarFilters.SearchParams? = null
 
+    @Volatile private var dubName: String = ""
+
     override fun headersBuilder() = super.headersBuilder()
         .set(
             "User-Agent",
@@ -217,13 +219,14 @@ class AniStar :
             title to file
         }.distinctBy { it.second }.toList()
 
+        dubName = DUB_REGEX.find(playerPage)?.groupValues?.get(1)?.trim().orEmpty()
+
         return entries.mapIndexed { index, (title, file) ->
-            val parsed = EPISODE_NUMBER_REGEX.findAll(title).lastOrNull()?.value?.toFloatOrNull()
             SEpisode.create().apply {
                 url = file
                 name = title.ifBlank { "Серия ${index + 1}" }
-                episode_number = parsed ?: (index + 1f)
-                scanlator = "AniStar"
+                episode_number = index + 1f
+                scanlator = dubName.ifBlank { "AniStar" }
             }
         }
     }
@@ -251,7 +254,9 @@ class AniStar :
 
         val best = ordered.firstOrNull()
         val target = best?.second ?: playlistUrl
-        val label = if (best != null && best.first > 0) "AniStar - ${best.first}p" else "AniStar - HLS"
+        val quality = QUALITY_REGEX.find(target)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+        val dub = dubName.ifBlank { "AniStar" }
+        val label = if (quality > 0) "$dub - ${quality}p" else "$dub - HLS"
         listOf(Video(target, label, target, headers = videoHeaders))
     }
 
@@ -326,7 +331,9 @@ class AniStar :
         private val PLAYER_REGEX = Regex("""(/test/player2/videoas\.php\?id=\d+&(?:amp;)?hash=[A-Za-z0-9]+)""")
 
         private val EPISODE_REGEX = Regex("""title:"([^"]*)",[\s\S]{0,600}?file:"([^"]+)"""")
-        private val EPISODE_NUMBER_REGEX = Regex("""\d+""")
+        private val DUB_REGEX = Regex("""Озвучка:\s*<span[^>]*>\s*([^<]+)""")
+
+        private val QUALITY_REGEX = Regex("""/(\d{3,4})\.mp4""")
 
         private val SIGNED_VARIANT_REGEX = Regex("""/media=hls/video/([0-9a-f]{16,})/""")
 
