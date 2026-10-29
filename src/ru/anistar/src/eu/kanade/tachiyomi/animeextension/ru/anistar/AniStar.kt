@@ -201,7 +201,7 @@ class AniStar :
             ?: return emptyList()
 
         val playerHeaders = headers.newBuilder()
-            .set("Referer", baseUrl + anime.url)
+            .set("Referer", baseUrl + response.request.url.encodedPath)
             .build()
         val playerPage = client.newCall(GET(playerUrl, playerHeaders)).execute().use { it.bodyCp1251() }
         val playlist = playerPage.substringAfter("var playlst=", "")
