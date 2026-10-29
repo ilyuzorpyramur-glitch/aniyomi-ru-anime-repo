@@ -56,10 +56,10 @@
   {
     "name": "Aniyomi: AniStar",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.anistar",
-    "apk": "aniyomi-ru.anistar-v14.3.apk",
+    "apk": "aniyomi-ru.anistar-v14.4.apk",
     "lang": "ru",
-    "code": 3,
-    "version": "14.3",
+    "code": 4,
+    "version": "14.4",
     "nsfw": 0,
     "sources": [
       {
