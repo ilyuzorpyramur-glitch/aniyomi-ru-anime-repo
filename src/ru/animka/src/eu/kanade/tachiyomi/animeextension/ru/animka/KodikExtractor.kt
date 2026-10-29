@@ -4,7 +4,6 @@ import android.content.SharedPreferences
 import android.net.Uri
 import android.util.Base64
 import android.util.Log
-import aniyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.awaitSuccess
@@ -26,8 +25,6 @@ class KodikExtractor(
     private val baseUrl: String,
     private val preferences: SharedPreferences,
 ) {
-    private val playlistUtils by lazy { PlaylistUtils(client, headers) }
-
     private data class Translation(
         val id: String,
         val title: String,
@@ -85,14 +82,7 @@ class KodikExtractor(
                 if (src.isBlank()) continue
                 val url = decode(src) ?: continue
                 val label = translation.title + " " + quality + "p"
-                val extracted = runCatching {
-                    playlistUtils.extractFromHls(url, videoNameGen = { label })
-                }.getOrDefault(emptyList())
-                if (extracted.isNotEmpty()) {
-                    videos += extracted
-                } else {
-                    videos += Video(url, label, url, headers = kodikHeaders())
-                }
+                videos += Video(url, label, url, headers = kodikHeaders())
             }
         }
 
