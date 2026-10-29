@@ -60,7 +60,8 @@ class AniDub :
     override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/anime/page/$page/", headers)
 
     override fun popularAnimeParse(response: Response): AnimesPage {
-        if (response.request.url.encodedPath != "/anime/page/1/") return listParse(response)
+        val path = response.request.url.encodedPath
+        if (path != "/anime/page/1/" && path != "/anime/") return listParse(response)
         val document = Jsoup.parse(response.bodyString(), baseUrl)
         val inCatalog = document.select("div#dle-content a.th-in[href], div.th-item a.th-in[href]")
             .mapNotNull { it.absUrl("href").ifBlank { it.attr("href") } }
