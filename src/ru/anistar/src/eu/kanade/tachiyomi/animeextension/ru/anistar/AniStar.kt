@@ -262,7 +262,7 @@ class AniStar :
         lines.forEach { line ->
             when {
                 line.startsWith("#EXT-X-STREAM-INF") -> {
-                    height = RESOLUTION_REGEX.find(line)?.groupValues?.get(2)?.toIntOrNull() ?: 0
+                    height = RESOLUTION_REGEX.find(line)?.groupValues?.get(1)?.toIntOrNull() ?: 0
                 }
                 line.startsWith("http") -> {
                     out += height to line
