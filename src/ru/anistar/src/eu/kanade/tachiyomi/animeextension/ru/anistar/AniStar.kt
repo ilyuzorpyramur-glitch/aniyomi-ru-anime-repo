@@ -262,7 +262,20 @@ class AniStar :
                 }
             }
         }
-        return out.distinctBy { it.second }
+        return out
+            .map { (height, url) -> height to normalizeVariant(url) }
+            .distinctBy { it.second }
+    }
+
+    /**
+     * Signed variants (sfv.an-media.org/key=...,end=...) expire and answer 403 "Wrong key".
+     * The same file is served unsigned from sf2: /video/<hash>/<quality>.mp4/index.m3u8.
+     */
+    private fun normalizeVariant(url: String): String {
+        val match = SIGNED_VARIANT_REGEX.find(url) ?: return url
+        val hash = match.groupValues[1]
+        val quality = if (url.contains("/720.")) "720" else "360"
+        return "https://sf2.an-media.org/video/$hash/$quality.mp4/index.m3u8"
     }
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
@@ -306,6 +319,8 @@ class AniStar :
 
         private val EPISODE_REGEX = Regex("""title:"([^"]*)",[\s\S]{0,600}?file:"([^"]+)"""")
         private val EPISODE_NUMBER_REGEX = Regex("""\d+""")
+
+        private val SIGNED_VARIANT_REGEX = Regex("""/media=hls/video/([0-9a-f]{16,})/""")
 
         private val RESOLUTION_REGEX = Regex("""RESOLUTION=\d+x(\d+)""")
     }
