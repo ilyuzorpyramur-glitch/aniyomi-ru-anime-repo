@@ -16,8 +16,9 @@ import okhttp3.Request
 import org.json.JSONObject
 
 /**
- * Kodik: страница плеера подписана (`urlParams`), переводы и серии отдаются в `<select>`,
- * ссылки на потоки приходят из POST /ftor и закодированы сдвигом букв на 18 + base64.
+ * Kodik: страница плеера подписана (`urlParams`), озвучки и серии лежат в разметке,
+ * потоки отдаёт POST /ftor, ссылки закодированы сдвигом букв на 18 + base64.
+ * Разметку Kodik разбираем регулярками: Jsoup теряет часть вложенных списков.
  */
 class KodikExtractor(
     private val client: OkHttpClient,
@@ -38,6 +39,11 @@ class KodikExtractor(
 
     suspend fun videos(playerUrl: String, season: Int, episode: Int): List<Video> {
         val page = fetch(playerUrl)
+        if (page.isBlank()) {
+            Log.e(TAG, "страница плеера не загрузилась")
+            return emptyList()
+        }
+
         val params = URL_PARAMS_REGEX.find(page)?.groupValues?.get(1)
             ?.let { runCatching { JSONObject(it) }.getOrNull() }
         if (params == null) {
@@ -46,18 +52,12 @@ class KodikExtractor(
         }
 
         val translations = parseTranslations(page)
-        Log.e(TAG, "kodik page=" + page.length + " translations=" + translations.size)
-        if (translations.isEmpty()) {
-            Log.e(TAG, "озвучки не найдены")
-            return emptyList()
-        }
+        Log.e(TAG, "page=" + page.length + " translations=" + translations.size)
+        if (translations.isEmpty()) return emptyList()
 
-        val episodeOption = doc.select("select option[data-id][data-hash]")
-            .firstOrNull { it.attr("value") == episode.toString() && it.hasAttr("data-hash") }
-
+        val episodeAttrs = episodeAttrs(page, episode)
         val ignoreSubs = preferences.getBoolean(PREF_IGNORE_SUBS, true)
-        Log.e(TAG, "kodik episode attrs=" + episodeAttrs)
-        Log.e(TAG, "kodik keep=" + translations.joinToString { it.title + "/" + it.mediaType + "/" + it.id })
+
         val wanted = translations
             .filter { !ignoreSubs || !it.kind.contains("sub", ignoreCase = true) }
             .filter { matchesPreference(it.title) }
@@ -68,19 +68,23 @@ class KodikExtractor(
 
         for (translation in wanted) {
             val isSerial = translation.mediaType != "video" && episodeAttrs != null
-            val id = if (isSerial) episodeAttrs!!["data-id"].orEmpty() else translation.mediaId
-            val hash = if (isSerial) episodeAttrs!!["data-hash"].orEmpty() else translation.mediaHash
+            val id = if (isSerial) episodeAttrs?.get("data-id").orEmpty() else translation.mediaId
+            val hash = if (isSerial) episodeAttrs?.get("data-hash").orEmpty() else translation.mediaHash
             if (id.isBlank() || hash.isBlank()) continue
 
-            val links = requestLinks(params, translation, id, hash, isSerial)
-            Log.e(TAG, "kodik ftor " + translation.title + " id=" + id + " type=" + if (isSerial) "seria" else "video" + " -> " + (links?.keys()?.asSequence()?.toList() ?: "null"))
-            if (links == null) continue
-            val sorted = qualities.filter { links.has(it) }.ifEmpty { listOfNotNull(links.keys().asSequence().maxOrNull()) }
-            for (quality in sorted) {
+            val links = requestLinks(params, translation, id, hash, isSerial) ?: continue
+            Log.e(TAG, "ftor " + translation.title + " -> " + links.keys().asSequence().toList())
+
+            val available = qualities.filter { links.has(it) }
+            val ordered = available.ifEmpty {
+                listOfNotNull(links.keys().asSequence().maxOrNull())
+            }
+
+            for (quality in ordered) {
                 val src = links.optJSONArray(quality)?.optJSONObject(0)?.optString("src").orEmpty()
                 if (src.isBlank()) continue
                 val url = decode(src) ?: continue
-                val label = "${translation.title} ${quality}p"
+                val label = translation.title + " " + quality + "p"
                 val extracted = runCatching {
                     playlistUtils.extractFromHls(url, videoNameGen = { label })
                 }.getOrDefault(emptyList())
@@ -92,6 +96,7 @@ class KodikExtractor(
             }
         }
 
+        Log.e(TAG, "videos=" + videos.size)
         return videos.distinctBy { it.videoUrl }
     }
 
@@ -99,19 +104,26 @@ class KodikExtractor(
         client.newCall(GET(url, kodikHeaders())).awaitSuccess().bodyString()
     }.getOrDefault("")
 
-    private fun parseTranslations(doc: Document): List<Translation> = doc.select("option[data-media-id]").mapNotNull { option ->
-        val id = option.attr("data-id").ifBlank { option.attr("value") }
-        val mediaId = option.attr("data-media-id")
+    private fun parseTranslations(page: String): List<Translation> = TRANSLATION_OPTION_REGEX.findAll(page).mapNotNull { match ->
+        val attrs = tagAttrs(match.value)
+        val id = attrs["data-id"].orEmpty().ifBlank { attrs["value"].orEmpty() }
+        val mediaId = attrs["data-media-id"].orEmpty()
         if (id.isBlank() || mediaId.isBlank()) return@mapNotNull null
         Translation(
             id = id,
-            title = option.attr("data-title").ifBlank { "Озвучка $id" },
-            mediaType = option.attr("data-media-type"),
+            title = attrs["data-title"].orEmpty().ifBlank { "Озвучка " + id },
+            mediaType = attrs["data-media-type"].orEmpty(),
             mediaId = mediaId,
-            mediaHash = option.attr("data-media-hash"),
-            kind = option.attr("data-translation-type"),
+            mediaHash = attrs["data-media-hash"].orEmpty(),
+            kind = attrs["data-translation-type"].orEmpty(),
         )
-    }
+    }.toList()
+
+    private fun episodeAttrs(page: String, episode: Int): Map<String, String>? = EPISODE_OPTION_REGEX.findAll(page)
+        .map { tagAttrs(it.value) }
+        .firstOrNull { it["value"] == episode.toString() && !it["data-hash"].isNullOrBlank() }
+
+    private fun tagAttrs(tag: String): Map<String, String> = ATTR_REGEX.findAll(tag).associate { it.groupValues[1] to it.groupValues[2] }
 
     private suspend fun requestLinks(
         params: JSONObject,
@@ -135,7 +147,7 @@ class KodikExtractor(
             .build()
 
         val request = Request.Builder()
-            .url("https://$pd/ftor")
+            .url("https://" + pd + "/ftor")
             .post(body)
             .headers(kodikHeaders())
             .build()
@@ -151,8 +163,7 @@ class KodikExtractor(
         val useMax = preferences.getBoolean(PREF_USE_MAX_QUALITY, true)
         if (useMax) return available
         val chosen = preferences.getStringSet(PREF_QUALITY, emptySet()).orEmpty()
-        val sorted = available.filter { it in chosen }
-        return sorted + available.filter { it !in chosen }
+        return available.filter { it in chosen } + available.filter { it !in chosen }
     }
 
     private fun matchesPreference(title: String): Boolean {
@@ -193,6 +204,7 @@ class KodikExtractor(
         const val PREF_QUALITY = "pref_quality"
         const val PREF_IGNORE_SUBS = "pref_ignore_subs"
         const val PREF_DUB_TEAM = "pref_dub_team"
+
         private val URL_PARAMS_REGEX = Regex("""urlParams\s*=\s*'([^']+)'""")
         private val TRANSLATION_OPTION_REGEX = Regex("""<option\b[^>]*data-media-id="[^"]*"[^>]*>""")
         private val EPISODE_OPTION_REGEX = Regex("""<option\b[^>]*data-hash="[^"]*"[^>]*>""")
