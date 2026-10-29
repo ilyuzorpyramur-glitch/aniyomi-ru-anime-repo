@@ -55,13 +55,13 @@ class AniDub :
 
     // ============================== Popular ===============================
 
-    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/anime/anime_ongoing/page/$page/", headers)
+    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/anime/page/$page/", headers)
 
     override fun popularAnimeParse(response: Response): AnimesPage = listParse(response)
 
     // =============================== Latest ===============================
 
-    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/anime/page/$page/", headers)
+    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/anime/anime_ongoing/page/$page/", headers)
 
     override fun latestUpdatesParse(response: Response): AnimesPage = listParse(response)
 
@@ -87,6 +87,7 @@ class AniDub :
 
     private fun listParse(response: Response): AnimesPage {
         val document = Jsoup.parse(response.bodyString(), baseUrl)
+        document.select("#owl-popular").remove()
         val cards = document.select("div.th-item a.th-in[href], a[href\$=.html]:has(.th-title)")
             .mapNotNull { link ->
                 val href = link.absUrl("href").ifBlank { link.attr("href") }
@@ -98,7 +99,9 @@ class AniDub :
                 SAnime.create().apply {
                     url = href.substringAfter(baseUrl)
                     this.title = title
-                    thumbnail_url = link.selectFirst("img")?.let { imageUrl(it) }
+                    thumbnail_url = (link.selectFirst("img")
+                        ?: link.parents().firstOrNull { it.hasClass("th-item") }?.selectFirst("img"))
+                        ?.let { imageUrl(it) }
                 }
             }
             .distinctBy { it.url }
