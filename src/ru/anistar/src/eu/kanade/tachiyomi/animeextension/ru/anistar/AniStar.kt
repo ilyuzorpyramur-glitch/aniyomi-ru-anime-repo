@@ -204,13 +204,13 @@ class AniStar :
 
         EMBED_REGEX.find(html)?.let { match ->
             val embed = match.groupValues[1].replace("&amp;", "&")
-            val numbers = runCatching { deepEnt.resolve(embed, 20).episodeNumbers }.getOrNull()
-                .orEmpty()
-                .ifEmpty { listOf(1) }
+            val pagePath = response.request.url.encodedPath
+            val count = EPISODE_COUNT_REGEX.find(html)?.groupValues?.get(1)?.toIntOrNull()
+                ?.coerceIn(1, 200) ?: 1
             dubName = ""
-            return numbers.map { number ->
+            return (1..count).map { number ->
                 SEpisode.create().apply {
-                    url = "$DEEP_ENT_PREFIX$embed|$number"
+                    url = "$DEEP_ENT_PREFIX$pagePath|$embed|$number"
                     name = "Серия $number"
                     episode_number = number.toFloat()
                     scanlator = "AniStar"
@@ -263,10 +263,13 @@ class AniStar :
     override suspend fun getVideoList(episode: SEpisode): List<Video> = withContext(Dispatchers.IO) {
         if (episode.url.startsWith(DEEP_ENT_PREFIX)) {
             val parts = episode.url.removePrefix(DEEP_ENT_PREFIX).split("|")
-            val embed = parts.getOrNull(0).orEmpty()
-            val number = parts.getOrNull(1).orEmpty()
-            val target = if (embed.contains("episode=")) embed else "$embed&episode=$number"
-            val streams = runCatching { deepEnt.resolve(target, 25).streams }.getOrNull().orEmpty()
+            val pagePath = parts.getOrNull(0).orEmpty()
+            val embed = parts.getOrNull(1).orEmpty()
+            val number = parts.getOrNull(2)?.toIntOrNull() ?: 1
+            val pageUrl = if (pagePath.startsWith("http")) pagePath else baseUrl + pagePath
+            val streams = runCatching {
+                deepEnt.resolve(pageUrl, embed, number, 25).streams
+            }.getOrNull().orEmpty()
             val stream = streams.firstOrNull { it.contains(".m3u8") }
                 ?: return@withContext emptyList()
             return@withContext listOf(Video(stream, "AniStar - HLS", stream, headers = videoHeaders))
@@ -382,6 +385,8 @@ class AniStar :
         private val DUB_REGEX = Regex("""Озвучка:\s*<span[^>]*>\s*([^<]+)""")
 
         private const val DEEP_ENT_PREFIX = "deepent|"
+
+        private val EPISODE_COUNT_REGEX = Regex("""Серии:[^0-9]{0,12}(\d{1,4})""")
 
         private val EMBED_REGEX = Regex("""urlFrameGlobal='([^']*deep-ent[^']*)'""")
 

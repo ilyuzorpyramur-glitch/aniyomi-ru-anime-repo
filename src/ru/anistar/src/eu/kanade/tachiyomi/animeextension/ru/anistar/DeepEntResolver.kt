@@ -16,9 +16,12 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * deep-ent.ru — внешний плеер (Next.js), который сам подписывает запросы к своему API.
- * Обычный HTTP-клиент получает 403 «Плеер недоступен для этого сайта», поэтому
- * страницу грузим в WebView, перехватываем запрошенные m3u8 и ответы API с сериями.
+ * deep-ent.ru — внешний плеер (Next.js), который отдаёт видео только когда iframe
+ * открыт со страницы сайта (иначе API отвечает «Плеер недоступен для этого сайта»).
+ *
+ * Поэтому грузим не embed напрямую, а страницу релиза: она сама подставляет iframe
+ * с правильным Referer, а мы перехватываем запрошенный m3u8. Для конкретной серии
+ * подменяем src у iframe на embed с `&episode=N`.
  */
 class DeepEntResolver(
     private val client: OkHttpClient,
@@ -30,18 +33,16 @@ class DeepEntResolver(
 
     data class Result(
         val streams: List<String> = emptyList(),
-        val episodeNumbers: List<Int> = emptyList(),
         val apiBodies: List<String> = emptyList(),
     )
 
     @SuppressLint("SetJavaScriptEnabled")
-    fun resolve(embedUrl: String, timeoutSeconds: Long): Result {
+    fun resolve(pageUrl: String, embedUrl: String?, episode: Int?, timeoutSeconds: Long): Result {
         val latch = CountDownLatch(1)
         val streams = LinkedHashSet<String>()
         val bodies = mutableListOf<String>()
         var webView: WebView? = null
-        val bridge = Bridge(latch) { payload -> if (bodies.size < 20) bodies += payload }
-        val bridgeName = "AniStarBridge"
+        val bridge = Bridge { payload -> if (bodies.size < 20) bodies += payload }
 
         handler.post {
             val view = WebView(context)
@@ -53,7 +54,7 @@ class DeepEntResolver(
                 mediaPlaybackRequiresUserGesture = false
                 userAgentString = headers["User-Agent"]
             }
-            view.addJavascriptInterface(bridge, bridgeName)
+            view.addJavascriptInterface(bridge, BRIDGE)
             view.webViewClient = object : WebViewClient() {
                 override fun shouldInterceptRequest(
                     view: WebView?,
@@ -69,10 +70,13 @@ class DeepEntResolver(
 
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    view?.evaluateJavascript(HOOK_JS.replace("%B%", bridgeName), null)
+                    view?.evaluateJavascript(HOOK_JS.replace("%B%", BRIDGE), null)
+                    if (embedUrl != null && episode != null) {
+                        view?.evaluateJavascript(frameJs(embedUrl, episode), null)
+                    }
                 }
             }
-            view.loadUrl(embedUrl)
+            view.loadUrl(pageUrl)
         }
 
         latch.await(timeoutSeconds, TimeUnit.SECONDS)
@@ -86,32 +90,30 @@ class DeepEntResolver(
             java.io.File(context.cacheDir, "deepent.jsonl").writeText(bodies.joinToString("\n"))
         }
 
-        val numbers = bodies
-            .flatMap { body ->
-                (EPISODE_JSON_REGEX.findAll(body) + EPISODE_ALT_REGEX.findAll(body))
-                    .map { m -> m.groupValues[1].toIntOrNull() }
-            }
-            .filterNotNull()
-            .distinct()
-            .sorted()
-
-        return Result(streams.toList(), numbers, bodies)
+        return Result(streams.toList(), bodies)
     }
 
-    class Bridge(private val latch: CountDownLatch, private val sink: (String) -> Unit) {
+    private fun frameJs(embedUrl: String, episode: Int): String {
+        val target = if (embedUrl.contains("episode=")) embedUrl else "$embedUrl&episode=$episode"
+        return """
+            (function(){
+              try {
+                var f = document.getElementById('global_frameW');
+                if (f) { f.src = '$target'; }
+              } catch (e) {}
+            })();
+        """.trimIndent()
+    }
+
+    class Bridge(private val sink: (String) -> Unit) {
         @JavascriptInterface
         fun capture(payload: String) {
             if (payload.length in 20..300_000) sink(payload)
         }
-
-        @JavascriptInterface
-        fun done() = latch.countDown()
     }
 
     companion object {
-        private val EPISODE_JSON_REGEX = Regex(""""number"\s*:\s*(\d{1,4})""")
-
-        private val EPISODE_ALT_REGEX = Regex(""""episode"\s*:\s*(\d{1,4})""")
+        private const val BRIDGE = "AniStarBridge"
 
         private val HOOK_JS = """
             (function(){
@@ -121,28 +123,11 @@ class DeepEntResolver(
               if (of) {
                 window.fetch = function(){
                   return of.apply(this, arguments).then(function(r){
-                    try { r.clone().text().then(function(t){ if (t && t.indexOf('episode') > -1) B.capture(t); }); } catch(e){}
+                    try { r.clone().text().then(function(t){ if (t && t.length < 200000) B.capture(t); }); } catch(e){}
                     return r;
                   });
                 };
               }
-              try {
-                var seg = location.pathname.split('/').filter(Boolean)[0] || '';
-                var qs = new URLSearchParams(location.search);
-                var api = '/api/v1/anime/' + seg + '?season=' + (qs.get('season') || '') +
-                          '&partner=' + (qs.get('partner') || '');
-                fetch(api, { headers: { 'accept': 'application/json' } })
-                  .then(function(r){ return r.text(); })
-                  .then(function(t){ if (t) B.capture(t); })
-                  .catch(function(){});
-              } catch (e) {}
-              var oo = XMLHttpRequest.prototype.open;
-              XMLHttpRequest.prototype.open = function(){
-                this.addEventListener('load', function(){
-                  try { if (this.responseText && this.responseText.indexOf('episode') > -1) B.capture(this.responseText); } catch(e){}
-                });
-                return oo.apply(this, arguments);
-              };
             })();
         """.trimIndent()
     }
