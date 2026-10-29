@@ -1,5 +1,23 @@
 [
   {
+    "name": "Aniyomi: AniDub",
+    "pkg": "eu.kanade.tachiyomi.animeextension.ru.anidub",
+    "apk": "aniyomi-ru.anidub-v14.1.apk",
+    "lang": "ru",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "AniDub",
+        "lang": "ru",
+        "id": "594495106808378125",
+        "baseUrl": "https://anidub.vip",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: AniLibria",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.anilibria",
     "apk": "aniyomi-ru.anilibria-v14.3.apk",
