@@ -14,8 +14,6 @@ import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
-import org.jsoup.Jsoup
-import org.jsoup.nodes.Document
 
 /**
  * Kodik: страница плеера подписана (`urlParams`), переводы и серии отдаются в `<select>`,
@@ -47,15 +45,8 @@ class KodikExtractor(
             return emptyList()
         }
 
-        val doc = Jsoup.parse(page, playerUrl)
-        val translations = parseTranslations(doc)
-        Log.e(
-            TAG,
-            "kodik page=" + page.length + " translations=" + translations.size +
-                " selects=" + doc.select("select").size + " options=" + doc.select("option").size +
-                " hasMediaId=" + page.contains("data-media-id") +
-                " sample=" + doc.select("select").firstOrNull()?.select("option")?.firstOrNull()?.outerHtml()?.take(120),
-        )
+        val translations = parseTranslations(page)
+        Log.e(TAG, "kodik page=" + page.length + " translations=" + translations.size)
         if (translations.isEmpty()) {
             Log.e(TAG, "озвучки не найдены")
             return emptyList()
@@ -65,7 +56,7 @@ class KodikExtractor(
             .firstOrNull { it.attr("value") == episode.toString() && it.hasAttr("data-hash") }
 
         val ignoreSubs = preferences.getBoolean(PREF_IGNORE_SUBS, true)
-        Log.e(TAG, "kodik episodes options=" + doc.select("select option[data-id][data-hash]").size)
+        Log.e(TAG, "kodik episode attrs=" + episodeAttrs)
         Log.e(TAG, "kodik keep=" + translations.joinToString { it.title + "/" + it.mediaType + "/" + it.id })
         val wanted = translations
             .filter { !ignoreSubs || !it.kind.contains("sub", ignoreCase = true) }
@@ -76,9 +67,9 @@ class KodikExtractor(
         val videos = mutableListOf<Video>()
 
         for (translation in wanted) {
-            val isSerial = translation.mediaType != "video" && episodeOption != null
-            val id = if (isSerial) episodeOption!!.attr("data-id") else translation.mediaId
-            val hash = if (isSerial) episodeOption!!.attr("data-hash") else translation.mediaHash
+            val isSerial = translation.mediaType != "video" && episodeAttrs != null
+            val id = if (isSerial) episodeAttrs!!["data-id"].orEmpty() else translation.mediaId
+            val hash = if (isSerial) episodeAttrs!!["data-hash"].orEmpty() else translation.mediaHash
             if (id.isBlank() || hash.isBlank()) continue
 
             val links = requestLinks(params, translation, id, hash, isSerial)
@@ -203,5 +194,8 @@ class KodikExtractor(
         const val PREF_IGNORE_SUBS = "pref_ignore_subs"
         const val PREF_DUB_TEAM = "pref_dub_team"
         private val URL_PARAMS_REGEX = Regex("""urlParams\s*=\s*'([^']+)'""")
+        private val TRANSLATION_OPTION_REGEX = Regex("""<option\b[^>]*data-media-id="[^"]*"[^>]*>""")
+        private val EPISODE_OPTION_REGEX = Regex("""<option\b[^>]*data-hash="[^"]*"[^>]*>""")
+        private val ATTR_REGEX = Regex("""([a-zA-Z-]+)="([^"]*)"""")
     }
 }
