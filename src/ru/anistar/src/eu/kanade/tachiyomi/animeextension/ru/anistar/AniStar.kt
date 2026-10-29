@@ -234,17 +234,27 @@ class AniStar :
         val playlistUrl = if (episode.url.startsWith("http")) episode.url else baseUrl + episode.url
         val master = client.newCall(GET(playlistUrl, videoHeaders)).awaitSuccess().bodyString()
         val variants = parseMaster(master)
-        if (variants.isEmpty()) {
-            return@withContext listOf(Video(playlistUrl, "HLS", playlistUrl, headers = videoHeaders))
-        }
+
+        val working = variants.mapNotNull { (height, url) ->
+            val ok = runCatching {
+                client.newCall(GET(url, videoHeaders)).execute().use { response ->
+                    response.isSuccessful && response.bodyString().startsWith("#EXTM3U")
+                }
+            }.getOrDefault(false)
+            if (ok) height to url else null
+        }.distinctBy { it.second }
+
         val preferred = preferences.getString(PREF_QUALITY, PREF_QUALITY_DEFAULT)?.toIntOrNull() ?: 0
-        variants
-            .sortedByDescending { it.first == preferred }
+        val ordered = working
             .sortedByDescending { it.first }
             .sortedByDescending { it.first == preferred }
-            .map { (height, url) ->
-                Video(url, if (height > 0) "${height}p" else "HLS", url, headers = videoHeaders)
-            }
+
+        if (ordered.isEmpty()) {
+            return@withContext listOf(Video(playlistUrl, "HLS", playlistUrl, headers = videoHeaders))
+        }
+        ordered.map { (height, url) ->
+            Video(url, if (height > 0) "${height}p" else "HLS", url, headers = videoHeaders)
+        }
     }
 
     private fun parseMaster(master: String): List<Pair<Int, String>> {
