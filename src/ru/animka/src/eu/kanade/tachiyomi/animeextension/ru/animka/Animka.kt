@@ -15,6 +15,8 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import keiyoushi.utils.bodyString
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
@@ -234,7 +236,7 @@ class Animka :
         status.contains("Выходит", true) -> SAnime.ONGOING
         status.contains("Вышел", true) -> SAnime.COMPLETED
         status.contains("Заморожен", true) -> SAnime.ON_HIATUS
-        status.contains("Прекращ", true) -> SAnime.CANCELED
+        status.contains("Прекращ", true) -> SAnime.CANCELLED
         else -> SAnime.UNKNOWN
     }
 
@@ -294,16 +296,15 @@ class Animka :
 
     // =============================== Видео ===============================
 
-    override fun videoListRequest(episode: SEpisode): Request {
+    override suspend fun getVideoList(episode: SEpisode): List<Video> = withContext(Dispatchers.IO) {
         ensureGuard()
-        return GET(episode.url, headers)
-    }
-
-    override suspend fun videoListParse(response: Response): List<Video> {
+        val response = client.newCall(GET(episode.url, headers)).execute()
         val document = Jsoup.parse(response.bodyString(), baseUrl)
-        val url = response.request.url
+        response.close()
+
+        val url = episode.url.toHttpUrl()
         val season = url.queryParameter("s")?.toIntOrNull() ?: 0
-        val episode = url.queryParameter("e")?.toIntOrNull() ?: 0
+        val episodeNumber = url.queryParameter("e")?.toIntOrNull() ?: 0
 
         val section = document.selectFirst("section.player-section")
         val playerUrl = section?.attr("data-player-url")?.takeIf { it.isNotBlank() }
@@ -312,9 +313,20 @@ class Animka :
 
         if (!playerUrl.contains("kodik", true)) throw Exception("Неизвестный плеер: $playerUrl")
 
-        val videos = kodik.videos(playerUrl, season, episode)
+        val videos = kodik.videos(playerUrl, season, episodeNumber)
         if (videos.isEmpty()) throw Exception("Kodik не вернул видео")
-        return videos
+        videos
+    }
+
+    private fun imageUrl(element: Element): String {
+        val raw = element.attr("data-src").ifBlank {
+            element.attr("data-original").ifBlank { element.attr("src") }
+        }
+        return when {
+            raw.startsWith("//") -> "https:$raw"
+            raw.startsWith("/") -> baseUrl + raw
+            else -> raw
+        }
     }
 
     // ============================== Настройки ==============================

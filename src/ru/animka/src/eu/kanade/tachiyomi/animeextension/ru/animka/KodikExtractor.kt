@@ -55,7 +55,7 @@ class KodikExtractor(
         }
 
         val episodeOption = doc.select("select option[data-id][data-hash]")
-            .firstOrNull { it.value() == episode.toString() && it.hasAttr("data-hash") }
+            .firstOrNull { it.attr("value") == episode.toString() && it.hasAttr("data-hash") }
 
         val ignoreSubs = preferences.getBoolean(PREF_IGNORE_SUBS, true)
         val wanted = translations
@@ -98,7 +98,7 @@ class KodikExtractor(
     }.getOrDefault("")
 
     private fun parseTranslations(doc: Document): List<Translation> = doc.select("select option[data-media-id]").mapNotNull { option ->
-        val id = option.attr("data-id").ifBlank { option.value() }
+        val id = option.attr("data-id").ifBlank { option.attr("value") }
         val mediaId = option.attr("data-media-id")
         if (id.isBlank() || mediaId.isBlank()) return@mapNotNull null
         Translation(
@@ -111,7 +111,7 @@ class KodikExtractor(
         )
     }
 
-    private fun requestLinks(
+    private suspend fun requestLinks(
         params: JSONObject,
         translation: Translation,
         id: String,
