@@ -103,8 +103,7 @@ class AniDub :
             }
             .distinctBy { it.url }
 
-        val hasNext = document.select("a[href*=/page/]").any { it.text().contains("След", true) } ||
-            cards.size >= PAGE_SIZE
+        val hasNext = cards.size >= PAGE_SIZE
         return AnimesPage(cards, cards.isNotEmpty() && hasNext)
     }
 
@@ -194,7 +193,7 @@ class AniDub :
     companion object {
         private const val PREF_QUALITY = "pref_quality"
         private const val PREF_QUALITY_DEFAULT = "720"
-        private const val PAGE_SIZE = 30
+        private const val PAGE_SIZE = 10
 
         private val EPISODE_PAGE_REGEX = Regex("""-\d+-iz-\d+\.html$""")
         private val EPISODE_NUMBER_REGEX = Regex("""\d+""")
