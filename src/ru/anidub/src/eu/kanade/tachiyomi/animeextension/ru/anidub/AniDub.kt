@@ -105,7 +105,7 @@ class AniDub :
 
         val hasNext = document.select("a[href*=/page/]").any { it.text().contains("След", true) } ||
             cards.size >= PAGE_SIZE
-        AnimesPage(cards, cards.isNotEmpty() && hasNext)
+        return AnimesPage(cards, cards.isNotEmpty() && hasNext)
     }
 
     // =========================== Anime Details ============================
