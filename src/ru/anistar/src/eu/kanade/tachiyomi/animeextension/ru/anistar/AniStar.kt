@@ -67,11 +67,9 @@ class AniStar :
 
     // ============================== Popular ===============================
 
-    override fun popularAnimeRequest(page: Int): Request = GET(popularUrl(page), headers)
+    override fun popularAnimeRequest(page: Int): Request = latestUpdatesRequest(page)
 
     override fun popularAnimeParse(response: Response): AnimesPage = listParse(response)
-
-    private fun popularUrl(page: Int): String = if (page <= 1) "$baseUrl/filter/rating/" else "$baseUrl/filter/rating//page/$page/"
 
     // =============================== Latest ===============================
 
@@ -122,7 +120,7 @@ class AniStar :
             }
         }
         if (urls.isEmpty()) {
-            urls += if (params.sort == "rating") popularUrl(page) else "$baseUrl/page/$page/"
+            urls += "$baseUrl/page/$page/"
         }
         return urls
     }
@@ -169,11 +167,10 @@ class AniStar :
             title = document.selectFirst("h1")?.text()?.trim().orEmpty()
             thumbnail_url = document.selectFirst("img[itemprop=image]")?.let { imageUrl(it) }
                 ?: document.selectFirst("div.title_left img")?.let { imageUrl(it) }
-            genre = document.select("a[href*=/anime/]")
+            genre = document.select("div.news_header p.tags a[href*=/anime/]")
                 .map { it.text().trim() }
-                .filter { it.length in 3..24 }
+                .filter { it.isNotBlank() && !it.equals("Аниме", ignoreCase = true) }
                 .distinct()
-                .take(10)
                 .joinToString()
             description = buildString {
                 val body = document.selectFirst("[itemprop=description]")?.let { element ->
@@ -203,7 +200,10 @@ class AniStar :
             .firstOrNull { it.contains("videoas.php") && it.contains("hash=") }
             ?: return emptyList()
 
-        val playerPage = client.newCall(GET(playerUrl, headers)).execute().use { it.bodyCp1251() }
+        val playerHeaders = headers.newBuilder()
+            .set("Referer", baseUrl + anime.url)
+            .build()
+        val playerPage = client.newCall(GET(playerUrl, playerHeaders)).execute().use { it.bodyCp1251() }
         val playlist = playerPage.substringAfter("var playlst=", "")
         if (playlist.isBlank()) return emptyList()
 

@@ -13,17 +13,13 @@ object AniStarFilters {
 
     class YearsFilter : CheckBoxGroup("Годы", YEARS.map { CheckBoxVal(it, it) })
 
-    class SortFilter : AnimeFilter.Select<String>("Сортировка", SORTING.map { it.first }.toTypedArray(), 0)
-
     val FILTER_LIST: AnimeFilterList
         get() = AnimeFilterList(
-            SortFilter(),
             GenresFilter(),
             YearsFilter(),
         )
 
     data class SearchParams(
-        val sort: String = SORTING[0].second,
         val genres: List<String> = emptyList(),
         val years: List<String> = emptyList(),
     )
@@ -36,18 +32,11 @@ object AniStarFilters {
 
     fun getSearchParameters(filters: AnimeFilterList): SearchParams {
         if (filters.isEmpty()) return SearchParams()
-        val sortIndex = filters.firstOrNullAs<SortFilter>()?.state ?: 0
         return SearchParams(
-            sort = SORTING.getOrElse(sortIndex) { SORTING[0] }.second,
             genres = filters.firstOrNullAs<GenresFilter>()?.selected().orEmpty(),
             years = filters.firstOrNullAs<YearsFilter>()?.selected().orEmpty(),
         )
     }
-
-    val SORTING = listOf(
-        "Популярные" to "rating",
-        "Новые" to "date",
-    )
 
     val GENRES: List<Pair<String, String>> = listOf(
         "Экшен" to "/anime/action/",
