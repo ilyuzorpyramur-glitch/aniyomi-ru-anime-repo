@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.animeextension.ru.anidub
 
 import android.content.SharedPreferences
+import android.net.Uri
 import android.util.Base64
 import android.util.Log
 import aniyomi.lib.playlistutils.PlaylistUtils
@@ -50,11 +51,11 @@ class KodikResolver(
 
         val body = FormBody.Builder()
             .add("d", params.optString("d"))
-            .add("d_sign", params.optString("d_sign"))
+            .add("d_sign", Uri.decode(params.optString("d_sign")))
             .add("pd", pd)
-            .add("pd_sign", params.optString("pd_sign"))
-            .add("ref", params.optString("ref"))
-            .add("ref_sign", params.optString("ref_sign"))
+            .add("pd_sign", Uri.decode(params.optString("pd_sign")))
+            .add("ref", Uri.decode(params.optString("ref")))
+            .add("ref_sign", Uri.decode(params.optString("ref_sign")))
             .add("type", parts[3])
             .add("id", parts[4])
             .add("hash", parts[5].substringBefore('?'))
