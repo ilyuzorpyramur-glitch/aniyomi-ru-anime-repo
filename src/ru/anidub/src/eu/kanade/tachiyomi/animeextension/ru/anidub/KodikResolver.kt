@@ -26,7 +26,7 @@ class KodikResolver(
 ) {
     private val playlistUtils by lazy { PlaylistUtils(client, headers) }
 
-    fun videos(playerUrl: String): List<Video> {
+    suspend fun videos(playerUrl: String): List<Video> {
         val page = runCatching {
             client.newCall(GET(playerUrl, kodikHeaders())).awaitSuccess().bodyString()
         }.getOrNull() ?: return emptyList()
