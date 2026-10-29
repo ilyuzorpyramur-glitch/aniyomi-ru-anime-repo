@@ -47,6 +47,8 @@ class AniDub :
 
     @Volatile private var pendingTitle: String = ""
 
+    private val resolvedUrls = mutableMapOf<String, String>()
+
     override fun headersBuilder() = super.headersBuilder()
         .set(
             "User-Agent",
@@ -143,7 +145,40 @@ class AniDub :
 
     override fun animeDetailsRequest(anime: SAnime): Request {
         pendingTitle = anime.title
-        return GET(baseUrl + anime.url, headers)
+        return GET(resolve(anime.url, anime.title), headers)
+    }
+
+    /** На сайте есть карточки с мёртвыми ссылками: при 404 ищем рабочий адрес по названию. */
+    private fun resolve(path: String, title: String): String {
+        resolvedUrls[path]?.let { return it }
+        val direct = "$baseUrl$path"
+        val code = runCatching {
+            client.newCall(GET(direct, headers)).execute().use { it.code }
+        }.getOrDefault(0)
+        if (code != 404) {
+            resolvedUrls[path] = direct
+            return direct
+        }
+        val queries = buildList {
+            add(title.replace(Regex("""\s*\[.*?]"""), "").trim())
+            add(title.replace(Regex("""\s*\[.*?]"""), "").trim().substringBefore(' '))
+        }.filter { it.isNotBlank() }.distinct()
+
+        for (query in queries) {
+            val found = runCatching {
+                val url = "$baseUrl/?do=search&subaction=search&story=${query.encoded()}"
+                val page = Jsoup.parse(client.newCall(GET(url, headers)).execute().bodyString(), baseUrl)
+                page.select("div.th-item a.th-in[href]")
+                    .mapNotNull { it.absUrl("href").ifBlank { it.attr("href") } }
+                    .firstOrNull { it != direct }
+            }.getOrNull()
+            if (found != null) {
+                resolvedUrls[path] = found
+                return found
+            }
+        }
+        resolvedUrls[path] = direct
+        return direct
     }
 
     override fun animeDetailsParse(response: Response): SAnime {
@@ -189,7 +224,7 @@ class AniDub :
 
     // ============================== Episodes ==============================
 
-    override fun episodeListRequest(anime: SAnime): Request = GET(baseUrl + anime.url, headers)
+    override fun episodeListRequest(anime: SAnime): Request = GET(resolve(anime.url, anime.title), headers)
 
     override fun episodeListParse(response: Response): List<SEpisode> {
         val document = Jsoup.parse(response.bodyString(), baseUrl)
