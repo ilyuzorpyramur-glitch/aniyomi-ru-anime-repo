@@ -249,13 +249,10 @@ class AniStar :
             .sortedByDescending { it.first }
             .sortedByDescending { it.first == preferred }
 
-        if (ordered.isEmpty()) {
-            return@withContext listOf(Video(playlistUrl, "AniStar - HLS", playlistUrl, headers = videoHeaders))
-        }
-        ordered.map { (height, url) ->
-            val label = if (height > 0) "AniStar - ${height}p" else "AniStar - HLS"
-            Video(url, label, url, headers = videoHeaders)
-        }
+        val best = ordered.firstOrNull()
+        val target = best?.second ?: playlistUrl
+        val label = if (best != null && best.first > 0) "AniStar - ${best.first}p" else "AniStar - HLS"
+        listOf(Video(target, label, target, headers = videoHeaders))
     }
 
     private fun parseMaster(master: String): List<Pair<Int, String>> {
