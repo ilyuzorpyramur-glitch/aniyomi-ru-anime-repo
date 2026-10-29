@@ -130,7 +130,7 @@ class AniStar :
         return urls
     }
 
-    override fun getFilterList(): AnimeFilterList = AniStarFilters.filterList(preferences?.getBoolean(PREF_NSFW, false) ?: false)
+    override fun getFilterList(): AnimeFilterList = AniStarFilters.FILTER_LIST
 
     // ============================ List parsing ============================
 
@@ -143,7 +143,9 @@ class AniStar :
 
     private fun parseList(response: Response): AnimesPage {
         val document = Jsoup.parse(response.bodyCp1251(), baseUrl)
-        val items = document.select("div#dle-content div.news").mapNotNull { card ->
+        val cards = document.select("div#dle-content div.news")
+        val showNsfw = preferences?.getBoolean(PREF_NSFW, false) ?: false
+        val items = cards.mapNotNull { card ->
             val link = card.selectFirst("div.news_header a[href]") ?: return@mapNotNull null
             val href = link.absUrl("href").ifBlank { link.attr("href") }
             val titleText = link.text().trim()
@@ -152,6 +154,7 @@ class AniStar :
             val isAdPost = tags.any { it == "Новинки(онгоинги)" } &&
                 tags.none { it != "Новинки(онгоинги)" && it != "Аниме" }
             if (isAdPost) return@mapNotNull null
+            if (!showNsfw && tags.any { it.equals("Хентай", ignoreCase = true) }) return@mapNotNull null
             SAnime.create().apply {
                 url = href.substringAfter(baseUrl)
                 title = titleText
@@ -159,8 +162,7 @@ class AniStar :
             }
         }.distinctBy { it.url }
 
-        val hasNext = items.size >= PAGE_SIZE && !response.request.url.encodedPath.startsWith("/filter/rating")
-        return AnimesPage(items, hasNext)
+        return AnimesPage(items, cards.size >= PAGE_SIZE)
     }
 
     // =========================== Anime Details ============================
