@@ -54,6 +54,8 @@ class AniStar :
 
     @Volatile private var dubName: String = ""
 
+    private val deepEnt by lazy { DeepEntResolver(client, headers) }
+
     override fun headersBuilder() = super.headersBuilder()
         .set(
             "User-Agent",
@@ -199,6 +201,23 @@ class AniStar :
     override fun episodeListParse(response: Response): List<SEpisode> {
         val html = response.bodyCp1251()
         val document = Jsoup.parse(html, baseUrl)
+
+        EMBED_REGEX.find(html)?.let { match ->
+            val embed = match.groupValues[1].replace("&amp;", "&")
+            val numbers = runCatching { deepEnt.resolve(embed, 20).episodeNumbers }.getOrNull()
+                .orEmpty()
+                .ifEmpty { listOf(1) }
+            dubName = ""
+            return numbers.map { number ->
+                SEpisode.create().apply {
+                    url = "$DEEP_ENT_PREFIX$embed|$number"
+                    name = "Серия $number"
+                    episode_number = number.toFloat()
+                    scanlator = "AniStar"
+                }
+            }.sortedByDescending { it.episode_number }
+        }
+
         val playerPath = document.select("iframe[src*=/player2/]")
             .map { it.attr("src") }
             .firstOrNull { it.contains("videoas.php") && it.contains("hash=") }
@@ -242,6 +261,17 @@ class AniStar :
     // =============================== Video ================================
 
     override suspend fun getVideoList(episode: SEpisode): List<Video> = withContext(Dispatchers.IO) {
+        if (episode.url.startsWith(DEEP_ENT_PREFIX)) {
+            val parts = episode.url.removePrefix(DEEP_ENT_PREFIX).split("|")
+            val embed = parts.getOrNull(0).orEmpty()
+            val number = parts.getOrNull(1).orEmpty()
+            val target = if (embed.contains("episode=")) embed else "$embed&episode=$number"
+            val streams = runCatching { deepEnt.resolve(target, 25).streams }.getOrNull().orEmpty()
+            val stream = streams.firstOrNull { it.contains(".m3u8") }
+                ?: return@withContext emptyList()
+            return@withContext listOf(Video(stream, "AniStar - HLS", stream, headers = videoHeaders))
+        }
+
         val playlistUrl = if (episode.url.startsWith("http")) episode.url else baseUrl + episode.url
         val master = client.newCall(GET(playlistUrl, videoHeaders)).awaitSuccess().bodyString()
         val variants = parseMaster(master)
@@ -350,6 +380,10 @@ class AniStar :
 
         private val EPISODE_REGEX = Regex("""title:"([^"]*)",[\s\S]{0,600}?file:"([^"]+)"""")
         private val DUB_REGEX = Regex("""Озвучка:\s*<span[^>]*>\s*([^<]+)""")
+
+        private const val DEEP_ENT_PREFIX = "deepent|"
+
+        private val EMBED_REGEX = Regex("""urlFrameGlobal='([^']*deep-ent[^']*)'""")
 
         private val SPECIAL_REGEX = Regex("""(?i)спешл|speshl|ova|спецвыпуск|фильм""")
 
