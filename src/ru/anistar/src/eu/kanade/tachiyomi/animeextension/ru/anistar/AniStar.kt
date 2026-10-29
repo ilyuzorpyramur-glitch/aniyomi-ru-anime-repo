@@ -130,7 +130,7 @@ class AniStar :
         return urls
     }
 
-    override fun getFilterList(): AnimeFilterList = AniStarFilters.FILTER_LIST
+    override fun getFilterList(): AnimeFilterList = AniStarFilters.filterList(preferences?.getBoolean(PREF_NSFW, false) ?: false)
 
     // ============================ List parsing ============================
 
@@ -178,11 +178,21 @@ class AniStar :
             title = document.selectFirst("h1")?.text()?.trim().orEmpty()
             thumbnail_url = document.selectFirst("img[itemprop=image]")?.let { imageUrl(it) }
                 ?: document.selectFirst("div.title_left img")?.let { imageUrl(it) }
-            genre = document.select("p.tags a")
-                .map { it.text().trim() }
-                .filter { it.isNotBlank() && it !in SERVICE_TAGS }
-                .distinct()
-                .joinToString()
+            genre = document.select("ul.head li")
+                .firstOrNull { it.text().trim().startsWith("Жанр") }
+                ?.select("a")
+                ?.map { it.text().trim() }
+                ?.filter { it.isNotBlank() }
+                ?.distinct()
+                ?.joinToString()
+                .orEmpty()
+                .ifBlank {
+                    document.select("p.tags a")
+                        .map { it.text().trim() }
+                        .filter { it.isNotBlank() && it !in SERVICE_TAGS }
+                        .distinct()
+                        .joinToString()
+                }
             description = buildString {
                 val body = document.selectFirst("[itemprop=description]")?.let { element ->
                     val copy = element.clone()
