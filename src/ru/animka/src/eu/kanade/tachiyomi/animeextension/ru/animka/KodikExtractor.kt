@@ -73,7 +73,7 @@ class KodikExtractor(
             if (id.isBlank() || hash.isBlank()) continue
 
             val links = requestLinks(params, translation, id, hash, isSerial) ?: continue
-            val sorted = qualities.filter { links.has(it) }
+            val sorted = qualities.filter { links.has(it) }.ifEmpty { listOfNotNull(links.keys().asSequence().maxOrNull()) }
             for (quality in sorted) {
                 val src = links.optJSONArray(quality)?.optJSONObject(0)?.optString("src").orEmpty()
                 if (src.isBlank()) continue
@@ -145,12 +145,12 @@ class KodikExtractor(
     }
 
     private fun preferredQualities(): List<String> {
-        val useMax = preferences.getBoolean(PREF_USE_MAX_QUALITY, true)
         val available = listOf("1080", "720", "480", "360", "240")
-        if (useMax) return available.take(1)
+        val useMax = preferences.getBoolean(PREF_USE_MAX_QUALITY, true)
+        if (useMax) return available
         val chosen = preferences.getStringSet(PREF_QUALITY, emptySet()).orEmpty()
-        val filtered = available.filter { it in chosen }
-        return filtered.ifEmpty { available.take(1) }
+        val sorted = available.filter { it in chosen }
+        return sorted + available.filter { it !in chosen }
     }
 
     private fun matchesPreference(title: String): Boolean {

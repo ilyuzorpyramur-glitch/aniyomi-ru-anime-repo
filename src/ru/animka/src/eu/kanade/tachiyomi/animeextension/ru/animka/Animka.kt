@@ -219,27 +219,23 @@ class Animka :
                 .filter { it.isNotEmpty() }
                 .distinct()
                 .joinToString(", ")
-            status = convertStatus(filmMeta(document, "Статус"))
-            author = filmMeta(document, "Студии")
-            artist = filmMeta(document, "Режиссёр").ifBlank { null }
+            status = convertStatus(filmMeta(body, document, "Статус"))
+            author = filmMeta(body, document, "Студии")
+            artist = filmMeta(body, document, "Режиссёр").ifBlank { null }
             initialized = true
         }
     }
 
-    /** Таблица на сайте отдаётся с незакрытыми <td>, поэтому разбираем и пары, и сырой HTML. */
-    private fun filmMeta(document: Document, label: String): String {
-        document.select("table.film-meta-table tr").forEach { row ->
-            val cells = row.select("td")
-            if (cells.size >= 2 && cells[0].text().trim().equals(label, ignoreCase = true)) {
-                return cells[1].text().trim()
-            }
+    /** Таблица отдаётся с незакрытыми <td>: пробуем пары ячеек, затем сырой HTML. */
+    private fun filmMeta(body: String, document: Document, label: String): String {
+        val cells = document.select("table.film-meta-table td").map { it.text().trim() }
+        var index = 0
+        while (index < cells.size - 1) {
+            if (cells[index].equals(label, ignoreCase = true)) return cells[index + 1]
+            index++
         }
-        val table = document.selectFirst("table.film-meta-table") ?: return ""
-        val html = table.html()
-        val regex = Regex("""<td>\s*${Regex.escape(label)}\s*<td>\s*(.*?)\s*(?=<td>|<tr|</table|$)""", RegexOption.IGNORE_CASE)
-        return regex.find(html)?.groupValues?.get(1)
-            ?.let { Jsoup.parseBodyFragment(it).text().trim() }
-            .orEmpty()
+        val regex = Regex("""<td>\s*${Regex.escape(label)}\s*<td>\s*([^<]*)""", RegexOption.IGNORE_CASE)
+        return regex.find(body)?.groupValues?.get(1)?.trim().orEmpty()
     }
 
     private fun convertStatus(status: String): Int = when {
