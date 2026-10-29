@@ -285,8 +285,8 @@ class Animka :
                     lazyDoc.select("details.ep-season[data-season=$seasonNumber] table.ep-table tbody tr")
                 }.getOrNull().orEmpty().ifEmpty { season.select("table.ep-table tbody tr") }
             }
-            val parsed = rows.mapNotNull { it.toSEpisodeOrNull(slug, seasonNumber, seasons.size) }
-            episodes += parsed.reversed()
+            // Сайт отдаёт серии от новой к старой — сохраняем этот порядок.
+            episodes += rows.mapNotNull { it.toSEpisodeOrNull(slug, seasonNumber, seasons.size) }
         }
         return episodes
     }
