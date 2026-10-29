@@ -250,10 +250,11 @@ class AniStar :
             .sortedByDescending { it.first == preferred }
 
         if (ordered.isEmpty()) {
-            return@withContext listOf(Video(playlistUrl, "HLS", playlistUrl, headers = videoHeaders))
+            return@withContext listOf(Video(playlistUrl, "AniStar - HLS", playlistUrl, headers = videoHeaders))
         }
         ordered.map { (height, url) ->
-            Video(url, if (height > 0) "${height}p" else "HLS", url, headers = videoHeaders)
+            val label = if (height > 0) "AniStar - ${height}p" else "AniStar - HLS"
+            Video(url, label, url, headers = videoHeaders)
         }
     }
 
