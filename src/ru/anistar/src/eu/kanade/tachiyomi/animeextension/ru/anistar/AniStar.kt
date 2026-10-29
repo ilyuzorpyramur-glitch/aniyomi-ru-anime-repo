@@ -206,7 +206,7 @@ class AniStar :
         val playerHeaders = headers.newBuilder()
             .set("Referer", baseUrl + response.request.url.encodedPath)
             .build()
-        val playerPage = client.newCall(GET(playerUrl, playerHeaders)).execute().use { it.bodyCp1251() }
+        val playerPage = client.newCall(GET(playerUrl, playerHeaders)).execute().use { it.bodyUtf8() }
         val playlist = playerPage.substringAfter("var playlst=", "")
         if (playlist.isBlank()) return emptyList()
 
@@ -218,10 +218,11 @@ class AniStar :
         }.distinctBy { it.second }.toList()
 
         return entries.mapIndexed { index, (title, file) ->
+            val parsed = EPISODE_NUMBER_REGEX.findAll(title).lastOrNull()?.value?.toFloatOrNull()
             SEpisode.create().apply {
                 url = file
                 name = title.ifBlank { "Серия ${index + 1}" }
-                episode_number = index + 1f
+                episode_number = parsed ?: (index + 1f)
                 scanlator = "AniStar"
             }
         }
@@ -280,6 +281,8 @@ class AniStar :
 
     private fun Response.bodyCp1251(): String = body.bytes().toString(charset("windows-1251"))
 
+    private fun Response.bodyUtf8(): String = body.bytes().toString(Charsets.UTF_8)
+
     private fun imageUrl(element: Element): String {
         val raw = element.attr("data-src").ifBlank {
             element.attr("data-original").ifBlank { element.attr("src") }
@@ -302,6 +305,8 @@ class AniStar :
         private val PLAYER_REGEX = Regex("""(/test/player2/videoas\.php\?id=\d+&(?:amp;)?hash=[A-Za-z0-9]+)""")
 
         private val EPISODE_REGEX = Regex("""title:"([^"]*)",[\s\S]{0,600}?file:"([^"]+)"""")
+        private val EPISODE_NUMBER_REGEX = Regex("""\d+""")
+
         private val RESOLUTION_REGEX = Regex("""RESOLUTION=\d+x(\d+)""")
     }
 }
