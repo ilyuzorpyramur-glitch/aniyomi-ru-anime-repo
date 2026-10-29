@@ -205,6 +205,24 @@
     ]
   },
   {
+    "name": "Aniyomi: Animka",
+    "pkg": "eu.kanade.tachiyomi.animeextension.ru.animka",
+    "apk": "aniyomi-ru.animka-v14.1.apk",
+    "lang": "ru",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "Animka",
+        "lang": "ru",
+        "id": "8800158488351485559",
+        "baseUrl": "https://animka.life",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: BLDUB",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.bldub",
     "apk": "aniyomi-ru.bldub-v14.2.apk",
