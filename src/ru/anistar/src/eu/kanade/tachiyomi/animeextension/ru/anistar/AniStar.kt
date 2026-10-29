@@ -130,8 +130,7 @@ class AniStar :
         return urls
     }
 
-    override fun getFilterList(): AnimeFilterList =
-        AniStarFilters.filterList(preferences?.getBoolean(PREF_NSFW, false) ?: false)
+    override fun getFilterList(): AnimeFilterList = AniStarFilters.filterList(preferences?.getBoolean(PREF_NSFW, false) ?: false)
 
     // ============================ List parsing ============================
 
