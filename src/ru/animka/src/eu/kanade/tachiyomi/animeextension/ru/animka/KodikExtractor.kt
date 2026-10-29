@@ -49,7 +49,13 @@ class KodikExtractor(
 
         val doc = Jsoup.parse(page, playerUrl)
         val translations = parseTranslations(doc)
-        Log.e(TAG, "kodik page=" + page.length + " translations=" + translations.size)
+        Log.e(
+            TAG,
+            "kodik page=" + page.length + " translations=" + translations.size +
+                " selects=" + doc.select("select").size + " options=" + doc.select("option").size +
+                " hasMediaId=" + page.contains("data-media-id") +
+                " sample=" + doc.select("select").firstOrNull()?.select("option")?.firstOrNull()?.outerHtml()?.take(120),
+        )
         if (translations.isEmpty()) {
             Log.e(TAG, "озвучки не найдены")
             return emptyList()
