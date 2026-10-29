@@ -3,7 +3,6 @@ package eu.kanade.tachiyomi.animeextension.ru.anidub
 import android.content.SharedPreferences
 import android.util.Base64
 import aniyomi.lib.playlistutils.PlaylistUtils
-import app.cash.quickjs.QuickJs
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.awaitSuccess
@@ -16,8 +15,8 @@ import org.json.JSONObject
 
 /**
  * Kodik: страница плеера содержит подписанные параметры (`urlParams`), по ним
- * POST /ftor отдаёт ссылки на потоки. Сами ссылки закодированы скриптом плеера,
- * поэтому декодируем его же кодом через QuickJs.
+ * POST /ftor отдаёт ссылки на потоки. Ссылки закодированы сдвигом букв на 18
+ * и base64 — раскодируем тем же алгоритмом, без JS-движка.
  */
 class KodikResolver(
     private val client: OkHttpClient,
@@ -36,10 +35,8 @@ class KodikResolver(
             ?: return emptyList()
 
         val pd = params.optString("pd")
-        if (pd.isBlank()) return emptyList()
-
         val parts = playerUrl.split('/')
-        if (parts.size < 6) return emptyList()
+        if (pd.isBlank() || parts.size < 6) return emptyList()
 
         val body = FormBody.Builder()
             .add("d", params.optString("d"))
@@ -64,46 +61,38 @@ class KodikResolver(
         }.getOrNull() ?: return emptyList()
 
         val links = data.optJSONObject("links") ?: return emptyList()
-        val scriptUrl = SCRIPT_REGEX.find(page)?.groupValues?.get(1) ?: return emptyList()
-        val js = runCatching {
-            client.newCall(GET(scriptUrl, kodikHeaders())).awaitSuccess().bodyString()
-        }.getOrNull() ?: return emptyList()
-
-        val encoder = extractEncoder(js) ?: return emptyList()
         val preferred = preferences.getString(PREF_QUALITY, PREF_QUALITY_DEFAULT) ?: PREF_QUALITY_DEFAULT
 
-        val qualities = listOf("720", "480", "360").sortedByDescending { it == preferred }
-        return qualities.flatMap { quality ->
-            val src = links.optJSONArray(quality)?.optJSONObject(0)?.optString("src").orEmpty()
-            if (src.isBlank()) return@flatMap emptyList()
-            val decoded = decode(src, encoder) ?: return@flatMap emptyList()
-            playlistUtils.extractFromHls(decoded, videoNameGen = { "AniDub ($quality p Kodik)" })
-        }.distinctBy { it.videoUrl }
-    }
-
-    private fun decode(src: String, encoder: String): String? = runCatching {
-        val quickJs = QuickJs.create()
-        val base64 = quickJs.use { it.evaluate("t='$src'; $encoder") }.toString()
-        val url = Base64.decode(base64, Base64.DEFAULT).toString(Charsets.UTF_8)
-        if (url.startsWith("//")) "https:$url" else url
-    }.getOrNull()
-
-    /** Вытаскиваем из скрипта плеера функцию-кодировщик целиком, по балансу скобок. */
-    private fun extractEncoder(js: String): String? {
-        val atob = ATOB_REGEX.find(js) ?: return null
-        val deque = ArrayDeque<Char>()
-        var out = ""
-        deque.addFirst('(')
-        for (i in atob.range.last until js.length) {
-            val char = js[i]
-            when (char) {
-                '(', '{' -> deque.addFirst(char)
-                ')', '}' -> if (deque.isNotEmpty()) deque.removeFirst()
+        return listOf("720", "480", "360")
+            .sortedByDescending { it == preferred }
+            .flatMap { quality ->
+                val src = links.optJSONArray(quality)?.optJSONObject(0)?.optString("src").orEmpty()
+                if (src.isBlank()) return@flatMap emptyList()
+                val url = decode(src) ?: return@flatMap emptyList()
+                runCatching {
+                    playlistUtils.extractFromHls(url, videoNameGen = { "AniDub (${quality}p Kodik)" })
+                }.getOrDefault(emptyList())
             }
-            if (deque.isNotEmpty()) out += char else break
-        }
-        return out.ifBlank { null }
+            .distinctBy { it.videoUrl }
     }
+
+    /** Сдвиг букв на 18 внутри регистра + base64 → прямой адрес плейлиста. */
+    private fun decode(src: String): String? = runCatching {
+        val shifted = buildString(src.length) {
+            src.forEach { ch ->
+                if (ch in 'a'..'z' || ch in 'A'..'Z') {
+                    val max = if (ch <= 'Z') 'Z'.code else 'z'.code
+                    val code = ch.code + 18
+                    append((if (max >= code) code else code - 26).toChar())
+                } else {
+                    append(ch)
+                }
+            }
+        }
+        val padded = shifted + "=".repeat((4 - shifted.length % 4) % 4)
+        val decoded = String(Base64.decode(padded, Base64.DEFAULT), Charsets.UTF_8)
+        if (decoded.startsWith("//")) "https:$decoded" else decoded
+    }.getOrNull()
 
     private fun kodikHeaders(): Headers = headers.newBuilder()
         .set("Referer", "https://anidub.vip/")
@@ -115,7 +104,5 @@ class KodikResolver(
         private const val PREF_QUALITY_DEFAULT = "720"
 
         private val URL_PARAMS_REGEX = Regex("""urlParams = '([^']+)'""")
-        private val SCRIPT_REGEX = Regex("""src="([^"]*player_single[^"]*)"""")
-        private val ATOB_REGEX = Regex("""atob\(""")
     }
 }
