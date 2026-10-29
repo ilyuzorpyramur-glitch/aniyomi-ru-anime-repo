@@ -226,6 +226,7 @@ class Animka :
         }
     }
 
+    /** Таблица на сайте отдаётся с незакрытыми <td>, поэтому разбираем и пары, и сырой HTML. */
     private fun filmMeta(document: Document, label: String): String {
         document.select("table.film-meta-table tr").forEach { row ->
             val cells = row.select("td")
@@ -233,7 +234,12 @@ class Animka :
                 return cells[1].text().trim()
             }
         }
-        return ""
+        val table = document.selectFirst("table.film-meta-table") ?: return ""
+        val html = table.html()
+        val regex = Regex("""<td>\s*${Regex.escape(label)}\s*<td>\s*(.*?)\s*(?=<td>|<tr|</table|$)""", RegexOption.IGNORE_CASE)
+        return regex.find(html)?.groupValues?.get(1)
+            ?.let { Jsoup.parseBodyFragment(it).text().trim() }
+            .orEmpty()
     }
 
     private fun convertStatus(status: String): Int = when {
