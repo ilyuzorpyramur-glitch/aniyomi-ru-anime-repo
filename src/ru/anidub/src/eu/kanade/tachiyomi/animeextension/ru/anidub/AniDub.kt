@@ -164,21 +164,27 @@ class AniDub :
             add(title.replace(Regex("""\s*\[.*?]"""), "").trim().substringBefore(' '))
         }.filter { it.isNotBlank() }.distinct()
 
+        val cleanTitle = normalize(title)
         for (query in queries) {
             val found = runCatching {
                 val url = "$baseUrl/?do=search&subaction=search&story=${query.encoded()}"
                 val page = Jsoup.parse(client.newCall(GET(url, headers)).execute().bodyString(), baseUrl)
-                page.select("div.th-item a.th-in[href]")
-                    .mapNotNull { it.absUrl("href").ifBlank { it.attr("href") } }
-                    .firstOrNull { it != direct }
+                page.select("div.th-item a.th-in[href]").firstOrNull { link ->
+                    val href = link.absUrl("href").ifBlank { link.attr("href") }
+                    val candidate = normalize(link.selectFirst(".th-title")?.text().orEmpty())
+                    href.isNotBlank() && href != direct &&
+                        (candidate == cleanTitle || candidate.contains(cleanTitle) || cleanTitle.contains(candidate))
+                }?.let { it.absUrl("href").ifBlank { it.attr("href") } }
             }.getOrNull()
             if (found != null) {
                 resolvedUrls[path] = found
                 return found
             }
         }
-        resolvedUrls[path] = direct
-        return direct
+        // Совпадения нет — открываем страницу поиска, чтобы не показывать «HTTP 404».
+        val fallback = "$baseUrl/?do=search&subaction=search&story=${cleanTitle.encoded()}"
+        resolvedUrls[path] = fallback
+        return fallback
     }
 
     override fun animeDetailsParse(response: Response): SAnime {
@@ -202,6 +208,16 @@ class AniDub :
 
     private fun parseDetails(response: Response): SAnime {
         val document = Jsoup.parse(response.bodyString(), baseUrl)
+        val missing = document.selectFirst("h1") == null || document.selectFirst("div.fdesc") == null
+        if (missing) {
+            return SAnime.create().apply {
+                url = response.request.url.encodedPath
+                title = pendingTitle
+                description = "Страница этого тайтла удалена на сайте. " +
+                    "Откройте поиск по названию — возможно, есть другая версия."
+                initialized = true
+            }
+        }
         return SAnime.create().apply {
             url = response.request.url.encodedPath
             title = document.selectFirst("h1")?.text()?.replace(Regex("""\s*\[\d+ из \d+]"""), "")?.trim().orEmpty()
@@ -276,6 +292,12 @@ class AniDub :
             else -> raw
         }
     }
+
+    private fun normalize(value: String): String = value.lowercase()
+        .replace(Regex("""\s*\[.*?]"""), "")
+        .replace(Regex("""[^\p{L}\p{N} ]"""), "")
+        .replace(Regex("""\s+"""), " ")
+        .trim()
 
     private fun String.encoded(): String = URLEncoder.encode(this, "UTF-8")
 
