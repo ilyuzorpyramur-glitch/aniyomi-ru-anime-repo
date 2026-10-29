@@ -87,23 +87,25 @@ class AniDub :
 
     private fun listParse(response: Response): AnimesPage {
         val document = Jsoup.parse(response.bodyString(), baseUrl)
-        val cards = document.select("a[href\$=.html]").mapNotNull { link ->
-            val href = link.absUrl("href").ifBlank { link.attr("href") }
-            if (!href.contains("/anime/")) return@mapNotNull null
-            val slug = href.substringAfterLast('/')
-            // страницы отдельных серий вида «...-01-iz-12.html» в каталог не берём
-            if (EPISODE_PAGE_REGEX.containsMatchIn(slug)) return@mapNotNull null
-            val title = link.text().trim().ifBlank { link.attr("title").trim() }
-            if (title.isBlank() || title.length < 2) return@mapNotNull null
-            val image = link.selectFirst("img")?.let { imageUrl(it) }
-            SAnime.create().apply {
-                url = href.substringAfter(baseUrl)
-                this.title = title
-                thumbnail_url = image
+        val cards = document.select("div.th-item a.th-in[href], a[href\$=.html]:has(.th-title)")
+            .mapNotNull { link ->
+                val href = link.absUrl("href").ifBlank { link.attr("href") }
+                if (!href.contains("/anime/")) return@mapNotNull null
+                val slug = href.substringAfterLast('/')
+                if (EPISODE_PAGE_REGEX.containsMatchIn(slug)) return@mapNotNull null
+                val title = link.selectFirst(".th-title")?.text()?.trim().orEmpty()
+                if (title.isBlank()) return@mapNotNull null
+                SAnime.create().apply {
+                    url = href.substringAfter(baseUrl)
+                    this.title = title
+                    thumbnail_url = link.selectFirst("img")?.let { imageUrl(it) }
+                }
             }
-        }.distinctBy { it.url }
+            .distinctBy { it.url }
 
-        return AnimesPage(cards, cards.size >= PAGE_SIZE)
+        val hasNext = document.select("a[href*=/page/]").any { it.text().contains("След", true) } ||
+            cards.size >= PAGE_SIZE
+        AnimesPage(cards, cards.isNotEmpty() && hasNext)
     }
 
     // =========================== Anime Details ============================
@@ -115,15 +117,14 @@ class AniDub :
         return SAnime.create().apply {
             url = response.request.url.encodedPath
             title = document.selectFirst("h1")?.text()?.replace(Regex("""\s*\[\d+ из \d+]"""), "")?.trim().orEmpty()
-            thumbnail_url = document.selectFirst("meta[property=og:image]")?.attr("content")
-                ?.takeIf { it.isNotBlank() }
+            thumbnail_url = document.selectFirst("div.fposter img")?.let { imageUrl(it) }
                 ?: document.selectFirst("img[itemprop=image]")?.let { imageUrl(it) }
-            genre = document.select("a[href*=/xfsearch/genre/]")
+            genre = document.select("ul.flist a[href*=/xfsearch/genre/]")
                 .map { it.text().trim() }
                 .filter { it.isNotBlank() }
                 .distinct()
                 .joinToString()
-            description = document.selectFirst("div.sect-about-text")?.let { block ->
+            description = document.selectFirst("div.fdesc")?.let { block ->
                 val copy = block.clone()
                 copy.select("script, style, .text_spoiler").remove()
                 copy.text().trim()
