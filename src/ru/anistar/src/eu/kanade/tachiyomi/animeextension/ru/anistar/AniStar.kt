@@ -222,14 +222,20 @@ class AniStar :
 
         dubName = DUB_REGEX.find(playerPage)?.groupValues?.get(1)?.trim().orEmpty()
 
-        return entries.mapIndexed { index, (title, file) ->
+        return entries.mapIndexedNotNull { index, (title, file) ->
+            val number = title.trim().let { EPISODE_NUMBER_REGEX.find(it)?.value?.toFloatOrNull() }
+            val isSpecial = SPECIAL_REGEX.containsMatchIn(title)
             SEpisode.create().apply {
                 url = file
                 name = title.ifBlank { "Серия ${index + 1}" }
-                episode_number = index + 1f
+                episode_number = when {
+                    isSpecial -> 1000f + (number ?: (index + 1f))
+                    number != null -> number
+                    else -> index + 1f
+                }
                 scanlator = dubName.ifBlank { "AniStar" }
             }
-        }
+        }.distinctBy { it.episode_number }.sortedBy { it.episode_number }
     }
 
     // =============================== Video ================================
@@ -341,6 +347,8 @@ class AniStar :
 
         private val EPISODE_REGEX = Regex("""title:"([^"]*)",[\s\S]{0,600}?file:"([^"]+)"""")
         private val DUB_REGEX = Regex("""Озвучка:\s*<span[^>]*>\s*([^<]+)""")
+
+        private val SPECIAL_REGEX = Regex("""(?i)спешл|speshl|ova|спецвыпуск|фильм""")
 
         private val QUALITY_REGEX = Regex("""/(\d{3,4})\.mp4""")
 
