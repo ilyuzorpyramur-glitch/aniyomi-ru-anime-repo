@@ -43,7 +43,7 @@ class AniStar :
 
     override val lang = "ru"
 
-    override val supportsLatest = true
+    override val supportsLatest = false
 
     private val preferences by getPreferencesLazy()
 
@@ -67,7 +67,7 @@ class AniStar :
 
     // ============================== Popular ===============================
 
-    override fun popularAnimeRequest(page: Int): Request = latestUpdatesRequest(page)
+    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/page/$page/", headers)
 
     override fun popularAnimeParse(response: Response): AnimesPage = listParse(response)
 
@@ -195,10 +195,12 @@ class AniStar :
 
     override fun episodeListParse(response: Response): List<SEpisode> {
         val document = Jsoup.parse(response.bodyCp1251(), baseUrl)
-        val playerUrl = document.select("iframe[src*=/player2/]")
-            .map { it.absUrl("src").ifBlank { it.attr("src") } }
+        val playerPath = document.select("iframe[src*=/player2/]")
+            .map { it.attr("src") }
             .firstOrNull { it.contains("videoas.php") && it.contains("hash=") }
+            ?: PLAYER_REGEX.find(html)?.groupValues?.get(1)
             ?: return emptyList()
+        val playerUrl = if (playerPath.startsWith("http")) playerPath else baseUrl + playerPath.replace("&amp;", "&")
 
         val playerHeaders = headers.newBuilder()
             .set("Referer", baseUrl + response.request.url.encodedPath)
@@ -295,6 +297,8 @@ class AniStar :
         private const val PREF_QUALITY_DEFAULT = "0"
 
         private const val PAGE_SIZE = 10
+
+        private val PLAYER_REGEX = Regex("""(/test/player2/videoas\.php\?id=\d+&(?:amp;)?hash=[A-Za-z0-9]+)""")
 
         private val EPISODE_REGEX = Regex("""title:"([^"]*)",[\s\S]{0,600}?file:"([^"]+)"""")
         private val RESOLUTION_REGEX = Regex("""RESOLUTION=\d+x(\d+)""")
