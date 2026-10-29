@@ -194,7 +194,8 @@ class AniStar :
     override fun episodeListRequest(anime: SAnime): Request = GET(baseUrl + anime.url, headers)
 
     override fun episodeListParse(response: Response): List<SEpisode> {
-        val document = Jsoup.parse(response.bodyCp1251(), baseUrl)
+        val html = response.bodyCp1251()
+        val document = Jsoup.parse(html, baseUrl)
         val playerPath = document.select("iframe[src*=/player2/]")
             .map { it.attr("src") }
             .firstOrNull { it.contains("videoas.php") && it.contains("hash=") }
