@@ -1,9 +1,9 @@
 package eu.kanade.tachiyomi.animeextension.ru.anistar
 
 import android.util.Log
-import androidx.preference.SwitchPreferenceCompat
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
+import androidx.preference.SwitchPreferenceCompat
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage

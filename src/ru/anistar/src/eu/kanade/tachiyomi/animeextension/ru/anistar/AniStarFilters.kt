@@ -37,9 +37,8 @@ object AniStarFilters {
         )
     }
 
-    private fun genreValues(includeNsfw: Boolean): List<CheckBoxVal> =
-        GENRES.map { CheckBoxVal(it.first, it.second) } +
-            if (includeNsfw) NSFW_GENRES.map { CheckBoxVal(it.first, it.second) } else emptyList()
+    private fun genreValues(includeNsfw: Boolean): List<CheckBoxVal> = GENRES.map { CheckBoxVal(it.first, it.second) } +
+        if (includeNsfw) NSFW_GENRES.map { CheckBoxVal(it.first, it.second) } else emptyList()
 
     val NSFW_GENRES: List<Pair<String, String>> = listOf(
         "Хентай" to "/hentai/",
