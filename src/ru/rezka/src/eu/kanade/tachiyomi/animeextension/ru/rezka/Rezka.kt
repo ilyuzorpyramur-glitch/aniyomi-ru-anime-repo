@@ -29,6 +29,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.FormBody
+import okhttp3.CookieJar
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
@@ -78,6 +79,9 @@ class Rezka :
     private var anubisCookie: String? = null
 
     override val client: OkHttpClient = network.client.newBuilder()
+        // Старые cookie (в том числе verification от Anubis) уводят сайт на зеркало
+        // с формой входа. Расширению свои cookie не нужны: авторизуемся сами.
+        .cookieJar(CookieJar.NO_COOKIES)
         .addInterceptor { chain ->
             // Первый же запрос авторизует сессию: без cookie сайт отвечает 301
             // на зеркало с формой входа вместо каталога.
