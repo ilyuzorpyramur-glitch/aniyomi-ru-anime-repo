@@ -751,6 +751,14 @@ class Rezka :
     private class Translator(val name: String, val id: String, val active: Boolean)
 
     companion object {
+        private const val ANUBIS_PEEK = 64L * 1024
+        private const val ANUBIS_PASS = "/pass-challenge"
+        private const val ANUBIS_DEFAULT_PREFIX = "/.within.website/x/cmd/anubis/api"
+        private val CHALLENGE_REGEX = Regex(
+            """id="anubis_challenge"[^>]*>(.*?)</script>""",
+            RegexOption.DOT_MATCHES_ALL,
+        )
+        private val PREFIX_REGEX = Regex("""id="anubis_base_prefix"[^>]*>"?([^"<]+)"?""")
         private val qualityRegex = Regex("""(\d{3,4})\s*[pр]""")
         private val POST_ID_REGEX = Regex("""initCDN(?:Movies|Series)Events\((\d+)""")
         private val TRANSLATOR_ID_REGEX = Regex(
