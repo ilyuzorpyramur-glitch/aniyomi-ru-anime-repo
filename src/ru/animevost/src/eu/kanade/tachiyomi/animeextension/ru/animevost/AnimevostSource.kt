@@ -67,7 +67,8 @@ class AnimevostSource(
      * для этого хоста переключаемся на http — файл отдаётся нормально.
      */
     private fun toPosterUrl(src: String?): String? {
-        val fixed = UrlUtils.fixUrl(src, baseUrl)
+        if (src.isNullOrEmpty()) return null
+        val fixed = UrlUtils.fixUrl(src, baseUrl) ?: return null
         return if (fixed.contains("static.openni.ru")) fixed.replaceFirst("https://", "http://") else fixed
     }
 
