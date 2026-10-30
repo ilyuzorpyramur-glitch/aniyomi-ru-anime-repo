@@ -2,253 +2,553 @@ package eu.kanade.tachiyomi.animeextension.ru.animevost
 
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
+import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
-import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
-import eu.kanade.tachiyomi.network.awaitSuccess
-import keiyoushi.utils.AnimeHttpLegacySource
+import keiyoushi.utils.ParsedAnimeHttpLegacySource
+import keiyoushi.utils.UrlUtils
 import keiyoushi.utils.addListPreference
 import keiyoushi.utils.getPreferencesLazy
-import keiyoushi.utils.parseAs
-import kotlinx.serialization.Serializable
+import keiyoushi.utils.useAsJsoup
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
 import okhttp3.FormBody
+import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
+import org.jsoup.nodes.Document
+import org.jsoup.nodes.Element
+import org.jsoup.select.Elements
 
-/**
- * animevost.org — у сайта есть собственный JSON-API (api.animevost.org/v1),
- * тот же, что использует официальное приложение.
- *
- * Раньше расширение разбирало HTML каталога, а там на страницу приходится ровно
- * десять карточек (div.shortstory) — сколько ни чини селекторы, больше десяти
- * из страницы не достать. API отдаёт тот же каталог пачками по сорок записей и
- * сразу со всеми полями, плюс прямые mp4 без веб-плееров.
- */
-class AnimevostSource(override val name: String, override val baseUrl: String) :
-    AnimeHttpLegacySource(),
+data class AnimeDescription(
+    val year: String? = null,
+    val type: String? = null,
+    val rating: Int? = null,
+    val votes: Int? = null,
+    val description: String? = null,
+)
+
+class AnimevostSource(
+    override val name: String,
+    override val baseUrl: String,
+) :
+    ParsedAnimeHttpLegacySource(),
     ConfigurableAnimeSource {
+    private enum class SortBy(val by: String) {
+        RATING("rating"),
+        DATE("date"),
+        NEWS_READ("news_read"),
+        COMM_NUM("comm_num"),
+        TITLE("title"),
+    }
+
+    private enum class SortDirection(val direction: String) {
+        ASC("asc"),
+        DESC("desc"),
+    }
+
+    private val preferences by getPreferencesLazy()
 
     override val lang = "ru"
 
     override val supportsLatest = true
 
-    private val preferences by getPreferencesLazy()
+    private val nextPageSelector = "span.nav_ext + a, td.block_4 span:not(.nav_ext) + a"
 
-    override fun headersBuilder() = super.headersBuilder()
-        .set("Referer", "$baseUrl/")
+    private val backgroundImgRegex by lazy { Regex("""background-image:\s*url\(([^)]+)\)""") }
 
-    // ============================== Popular ===============================
+    // Helper to extract thumbnail from a given element
+    /**
+     * Постеры лежат на static.openni.ru, у которого просрочен сертификат
+     * Let's Encrypt (до 21.10.2026). OkHttp отклоняет такие картинки, поэтому
+     * для этого хоста переключаемся на http — файл отдаётся нормально.
+     */
+    private fun toPosterUrl(src: String?): String? {
+        val fixed = UrlUtils.fixUrl(src, baseUrl)
+        return if (fixed.contains("static.openni.ru")) fixed.replaceFirst("https://", "http://") else fixed
+    }
 
-    override fun popularAnimeRequest(page: Int): Request = catalogRequest(page)
+    private fun Element.extractThumbnail(): String? {
+        // 1) direct img inside
+        val img = selectFirst("img")
+        var src = img?.attr("src")?.takeIf { it.isNotEmpty() } ?: img?.attr("data-src")
+        if (src.isNullOrEmpty()) {
+            // 2) background-image in style
+            val style = attr("style")
+            src = backgroundImgRegex.find(style)?.groupValues?.get(1)?.trim()
+                ?.trim('"')?.trim('\'')
+        }
+        return src
+    }
 
-    override fun popularAnimeParse(response: Response): AnimesPage = catalogParse(response)
+    private fun animeRequest(page: Int, sortBy: SortBy, sortDirection: SortDirection = SortDirection.DESC, genre: String = "all"): Request {
+        val url = baseUrl.toHttpUrl().newBuilder()
 
-    // =============================== Latest ===============================
+        var body = FormBody.Builder()
+            .add("dlenewssortby", sortBy.by)
+            .add("dledirection", sortDirection.direction)
 
-    override fun latestUpdatesRequest(page: Int): Request = catalogRequest(page)
+        body = if (genre != "all") {
+            url.addPathSegment("zhanr")
+            url.addPathSegment(genre)
+            body.add("set_new_sort", "dle_sort_cat")
+                .add("set_direction_sort", "dle_direction_cat")
+        } else {
+            body.add("set_new_sort", "dle_sort_main")
+                .add("set_direction_sort", "dle_direction_main")
+        }
 
-    override fun latestUpdatesParse(response: Response): AnimesPage = catalogParse(response)
+        url.addPathSegment("page")
+        url.addPathSegment("$page")
 
-    // =============================== Search ===============================
+        return POST(url.toString(), headers, body.build())
+    }
+
+    // Anime details
+
+    override fun animeDetailsParse(document: Document): SAnime {
+        val anime = SAnime.create()
+
+        // Isolate the main story content block to avoid pulling in user comments.
+        // DLE (animevost engine) uses different class names depending on version/theme.
+        // Clone so we can strip comment nodes without mutating the live document.
+        val contentBlock = document.selectFirst(
+            ".shortstoryContent, .full_story, .fullstory, .shortstory, #dle-content",
+        )?.clone()
+
+        // Strip DLE comment sub-trees injected after the description.
+        contentBlock?.select(
+            "#comments, .comments, .comment_list, .comment_block, " +
+                ".zcomment, #zcomment, [class*=comment], [id*=comment]",
+        )?.remove()
+
+        // Thumbnail
+        document.selectFirst("img[src*='/uploads/']")
+            ?.let { img: Element -> img.attr("src").ifEmpty { img.attr("data-src") } }
+            ?.let { src ->
+                anime.thumbnail_url = toPosterUrl(src)
+            }
+
+        // Title
+        anime.title = document.selectFirst("h1, .title, .shortstoryHead h1")?.text() ?: document.title()
+
+        // Use only the sanitised content block — never the whole document — so that
+        // user comments cannot bleed into the description or the metadata fields.
+        val contentText = contentBlock?.text() ?: ""
+
+        // Extract fields from text
+        val yearRegex = "Год выхода:\\s*(.+?)(?=Тип:|Жанр:|$)".toRegex()
+        val genreRegex = "Жанр:\\s*(.+?)(?=Тип:|Год выхода:|$)".toRegex()
+        val typeRegex = "Тип:\\s*(.+?)(?=Жанр:|Год выхода:|$)".toRegex()
+
+        var year = ""
+        var genre = ""
+        var type = ""
+
+        yearRegex.find(contentText)?.let { year = it.groupValues[1].trim() }
+        genreRegex.find(contentText)?.let { genre = it.groupValues[1].trim() }
+        typeRegex.find(contentText)?.let { type = it.groupValues[1].trim() }
+
+        // Rating — comes from its own dedicated element, not the content block
+        val ratingText = document.selectFirst(".current-rating, .rating")?.text()
+        val rating = ratingText?.toIntOrNull()?.coerceIn(0, 100) ?: 0
+        val votesText = document.selectFirst(".ratingIn ~ span span")?.text()
+        val votes = votesText?.toIntOrNull() ?: 0
+
+        // Strip "Поле: Значение" metadata lines so they don't duplicate
+        // the structured fields already formatted by formatDescription.
+        val metaLineRegex = """[А-Яа-яЁё][А-Яа-яЁё ]+:\s*[^\n]+""".toRegex()
+        val pureDescription = contentText
+            .replace(metaLineRegex, "")
+            .replace("""\s{2,}""".toRegex(), " ")
+            .trim()
+
+        anime.genre = genre
+        anime.description = formatDescription(
+            AnimeDescription(
+                year.ifEmpty { null },
+                type.ifEmpty { null },
+                rating.takeIf { it > 0 },
+                votes.takeIf { it > 0 },
+                pureDescription.ifEmpty { null },
+            ),
+        )
+        return anime
+    }
+
+    private fun formatDescription(animeData: AnimeDescription): String {
+        var description = ""
+
+        if (animeData.year != null) {
+            description += "Год: ${animeData.year}\n"
+        }
+
+        if (animeData.rating != null && animeData.votes != null) {
+            val ratingValue = animeData.rating
+            val stars = 5 * ratingValue / 100
+            val fullStars = "★".repeat(stars)
+            val emptyStars = "☆".repeat((5 - stars).coerceAtLeast(0))
+
+            description += "Рейтинг: $fullStars$emptyStars (Голосов: ${animeData.votes})\n"
+        }
+
+        if (animeData.type != null) {
+            description += "Тип: ${animeData.type}\n"
+        }
+
+        if (description.isNotEmpty()) {
+            description += "\n"
+        }
+
+        val body = animeData.description?.replace("<br />", "") ?: ""
+        description += body
+        return description
+    }
+
+    // Episode
+
+    override fun episodeFromElement(element: Element) = throw UnsupportedOperationException()
+
+    override fun episodeListSelector() = throw UnsupportedOperationException()
+
+    override fun episodeListParse(response: Response): List<SEpisode> {
+        val document = response.useAsJsoup()
+        val startMarker = "var data = {"
+        val endMarker = "};"
+
+        val script = document.select("script").find { it.html().contains(startMarker) }
+            ?: return emptyList()
+
+        val scriptContent = script.html()
+        val dataString = scriptContent
+            .substringAfter(startMarker, "")
+            .substringBefore(endMarker, "")
+            .takeIf { it.isNotEmpty() } ?: return emptyList()
+
+        val cleanedDataString = dataString.trimEnd().removeSuffix(",")
+
+        val json = Json { isLenient = true }
+        val episodeData = try {
+            json.decodeFromString<Map<String, String>>("{$cleanedDataString}")
+        } catch (_: SerializationException) {
+            return emptyList()
+        }
+
+        val episodeList = mutableListOf<SEpisode>()
+        episodeData.entries.forEachIndexed { index, entry ->
+            val name = entry.key
+            val id = entry.value
+
+            if (name.isNotEmpty() && id.isNotEmpty()) {
+                episodeList.add(
+                    SEpisode.create().apply {
+                        url = "/frame5.php?play=$id&old=1"
+                        this.name = name
+                        episode_number = (index + 1).toFloat()
+                    },
+                )
+            }
+        }
+
+        return episodeList.reversed()
+    }
+
+    // Latest
+
+    override fun latestUpdatesParse(response: Response): AnimesPage = parseAnimeList(response)
+
+    override fun latestUpdatesRequest(page: Int) = animeRequest(page, SortBy.DATE)
+
+    override fun latestUpdatesSelector() = "a[href*='/tip/']"
+
+    override fun latestUpdatesFromElement(element: Element): SAnime = throw UnsupportedOperationException()
+
+    override fun latestUpdatesNextPageSelector() = nextPageSelector
+
+    // Popular Anime
+
+    override fun popularAnimeParse(response: Response): AnimesPage = parseAnimeList(response)
+
+    override fun popularAnimeRequest(page: Int) = animeRequest(page, SortBy.RATING)
+
+    override fun popularAnimeSelector() = "a[href*='/tip/']"
+
+    override fun popularAnimeFromElement(element: Element): SAnime = throw UnsupportedOperationException()
+
+    override fun popularAnimeNextPageSelector() = nextPageSelector
+
+    // Search
+
+    override fun searchAnimeParse(response: Response): AnimesPage = parseAnimeList(response)
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
-        if (query.isBlank()) return catalogRequest(page)
+        if (query.isNotBlank()) {
+            val searchStart = if (page <= 1) 0 else page
+            val resultFrom = (page - 1) * 10 + 1
+            val headers: Headers =
+                Headers.headersOf("Content-Type", "application/x-www-form-urlencoded", "charset", "UTF-8")
+            val body = FormBody.Builder()
+                .add("do", "search")
+                .add("subaction", "search")
+                .add("search_start", searchStart.toString())
+                .add("full_search", "0")
+                .add("result_from", resultFrom.toString())
+                .add("story", query)
+                .build()
 
-        val body = FormBody.Builder()
-            .add("name", query.trim())
-            .build()
+            return POST("$baseUrl/index.php?do=search", headers, body)
+        } else {
+            var sortBy = SortBy.DATE
+            var sortDirection = SortDirection.DESC
+            var genre = "all"
 
-        return POST("$API_URL/search", headers, body)
-    }
+            filters.forEach { filter ->
+                when (filter) {
+                    is GenreFilter -> {
+                        genre = filter.toString()
+                    }
 
-    override fun searchAnimeParse(response: Response): AnimesPage {
-        // Поиск отдаёт весь результат одной пачкой, без постраничности.
-        val animes = response.parseAs<ApiList>().data.map { it.toSAnime() }
+                    is SortFilter -> {
+                        if (filter.state != null) {
+                            sortBy = sortableList[filter.state!!.index].second
 
-        return AnimesPage(animes, false)
-    }
+                            sortDirection = if (filter.state!!.ascending) SortDirection.ASC else SortDirection.DESC
+                        }
+                    }
 
-    // =========================== Anime Details ============================
-
-    override fun animeDetailsRequest(anime: SAnime): Request = infoRequest(anime.url.toId())
-
-    override fun animeDetailsParse(response: Response): SAnime {
-        val item = response.parseAs<ApiList>().data.firstOrNull() ?: return SAnime.create()
-
-        return item.toSAnime()
-    }
-
-    override fun getAnimeUrl(anime: SAnime): String = "$baseUrl/index.php?do=search&subaction=search&story=${anime.title}"
-
-    // ============================== Episodes ==============================
-
-    override suspend fun getEpisodeList(anime: SAnime): List<SEpisode> {
-        val id = anime.url.toId()
-        val items = client.newCall(playlistRequest(id)).awaitSuccess().parseAs<List<ApiEpisode>>()
-
-        return items
-            .map { item ->
-                val number = EPISODE_NUMBER_REGEX.find(item.name)?.value?.toFloatOrNull() ?: 0f
-                SEpisode.create().apply {
-                    url = "/episode/$id/${item.name}"
-                    name = item.name
-                    episode_number = number
+                    else -> {}
                 }
-            }.sortedByDescending { it.episode_number }
+            }
+
+            return animeRequest(page, sortBy, sortDirection, genre)
+        }
     }
 
-    override fun episodeListParse(response: Response): List<SEpisode> = throw UnsupportedOperationException()
+    // Required by ParsedAnimeHttpSource but unused — searchAnimeParse() is fully overridden.
+    override fun searchAnimeSelector() = throw UnsupportedOperationException()
+    override fun searchAnimeFromElement(element: Element) = throw UnsupportedOperationException()
+    override fun searchAnimeNextPageSelector() = throw UnsupportedOperationException()
 
-    // ============================ Video Links =============================
+    // Common anime list parser
+    private fun parseAnimeList(response: Response): AnimesPage {
+        val document = response.useAsJsoup()
+        val seenUrls = mutableSetOf<String>()
+        val animes = mutableListOf<SAnime>()
 
-    override suspend fun getVideoList(episode: SEpisode): List<Video> {
-        val id = episode.url.substringAfter("/episode/").substringBefore('/')
-        val name = episode.url.substringAfter("/episode/$id/")
-
-        val items = client.newCall(playlistRequest(id)).awaitSuccess().parseAs<List<ApiEpisode>>()
-        val item = items.firstOrNull { it.name == name } ?: return emptyList()
-
-        // hd есть не у всех тайтлов (у старых 404), поэтому берём только
-        // непустые ссылки и проверять качество оставляем плееру.
-        return listOfNotNull(
-            item.hd?.takeIf { it.isNotBlank() }?.let { Video(it, "720p", it, headers = headers) },
-            item.std?.takeIf { it.isNotBlank() }?.let { Video(it, "480p", it, headers = headers) },
+        // DLE renders a dedicated block when a search yields no results.
+        // Detect it early so the fallback link-scraper below never picks up
+        // category/type nav-links (ТВ, OVA, ONA, Дунхуа, …) as fake anime cards.
+        val noResults = document.selectFirst(
+            ".searchnoresult, .search_noresult, " +
+                "div:containsOwn(Ничего не найдено), " +
+                "div:containsOwn(По вашему запросу ничего не найдено), " +
+                "div:containsOwn(Извините, по вашему запросу), " +
+                "p:containsOwn(Ничего не найдено)",
         )
+        if (noResults != null) return AnimesPage(emptyList(), false)
+
+        // DLE cards are always div.shortstory; search results may use div.searchnews /
+        // div.searchitem.  Fall back to div.post / article if the theme uses different
+        // markup.  We deliberately avoid broad selectors like .content or div:has(...)
+        // because they match parent wrappers and cause duplicates and wrong thumbnail lookups.
+        val containers = document.select("div.shortstory, div.searchnews, div.searchitem, div.post, article")
+            .ifEmpty {
+                // Last-resort fallback: any div that directly wraps a /tip/ link.
+                // We require the container to have an <img> child so that bare
+                // navigation/filter links (genre, type) are not mistaken for anime cards.
+                Elements(
+                    document.select("a[href*='/tip/']")
+                        .mapNotNull { it.parent() }
+                        .filter { parent -> parent.selectFirst("img") != null }
+                        .distinctBy { it.cssSelector() },
+                )
+            }
+
+        containers.forEach { container: Element ->
+            // Canonical URL comes from the first /tip/ link inside the card
+            val link = container.selectFirst("a[href*='/tip/']") ?: return@forEach
+            val href = link.attr("abs:href").ifEmpty { link.attr("href") }
+            if (href.isEmpty() || !seenUrls.add(href)) return@forEach
+
+            val anime = SAnime.create()
+            anime.setUrlWithoutDomain(href)
+
+            // Skip bare category/type pages.
+            // 1) Short all-letter slugs (<=6 chars, no hyphens/digits) cover English
+            //    names like "tv", "ova", "ona", "film", "dunhua".
+            // 2) Known Russian/transliterated type labels that the site uses as nav-links
+            //    are blocked by an explicit denylist so they never appear as search results.
+            val slug = href.trimEnd('/').substringAfterLast('/').lowercase()
+            val categoryDenylist = setOf(
+                "tv", "tvspeshl", "tv-speshl", "special", "speshl",
+                "ova", "ona", "film", "films", "movie",
+                "dunhua", "korotkometrazhniy", "korotkometrazhnyy",
+                "polnometrazhniy", "polnometrazhnyy",
+            )
+            if (slug.length <= 6 && slug.all { it.isLetter() }) return@forEach
+            if (slug in categoryDenylist) return@forEach
+
+            // Title: prefer the link title-attribute or img alt (set by the site),
+            // then any heading text, then the link text itself.
+            val imgInLink = link.selectFirst("img")
+            anime.title = link.attr("title")
+                .ifEmpty { imgInLink?.attr("alt") ?: "" }
+                .ifEmpty { container.selectFirst("h1, h2, h3, h4, .shortstoryHead a, .shortstoryHead")?.text() ?: "" }
+                .ifEmpty { link.text() }
+                .ifEmpty { "No title" }
+
+            // Thumbnail: look for a poster-sized upload image in the whole card.
+            // DLE puts posters under /uploads/; check both src and data-src to support
+            // lazy-loaded images (most common cause of blank thumbnails in search).
+            val posterUrl = container.selectFirst(
+                "img[src*='/uploads/'], img[data-src*='/uploads/']",
+            )?.let { img ->
+                img.attr("src").takeIf { "/uploads/" in it }
+                    ?: img.attr("data-src").takeIf { it.isNotEmpty() }
+            } ?: container.extractThumbnail()
+
+            posterUrl?.let { src ->
+                anime.thumbnail_url = toPosterUrl(src)
+            }
+
+            animes.add(anime)
+        }
+
+        val hasNextPage = document.select(nextPageSelector).first() != null
+        return AnimesPage(animes, hasNextPage)
+    }
+
+    // Video
+
+    override fun videoListParse(response: Response): List<Video> {
+        val videoList = mutableListOf<Video>()
+        val document = response.useAsJsoup()
+        val html = document.html()
+        val fileData = Regex("\"file\"\\s*:\\s*\"(.+?)\"")
+            .findAll(html)
+            .map { it.groupValues[1] }
+            .filter { it.contains("http") }
+            .maxByOrNull { it.length }
+            ?: return emptyList()
+
+        val qualityPattern = "\\[([^]]+)](.+?)(?=,\\[|\\$)".toRegex()
+
+        qualityPattern.findAll(fileData).forEach { match ->
+            val quality = match.groupValues[1]
+            val urlsString = match.groupValues[2]
+
+            val urls = urlsString
+                .split(" or ")
+                .map { it.trim() }
+                .filter { it.startsWith("http") }
+
+            urls.forEachIndexed { index, url ->
+                val qualityLabel = if (urls.size > 1) {
+                    "$quality - Mirror ${index + 1}"
+                } else {
+                    quality
+                }
+
+                videoList.add(Video(url, qualityLabel, url))
+            }
+        }
+
+        return videoList
     }
 
     override fun List<Video>.sortVideos(): List<Video> {
-        val quality = preferences.getString(PREF_QUALITY_KEY, PREF_QUALITY_DEFAULT) ?: return this
-
-        return sortedByDescending { it.videoTitle.contains(quality) }
+        val quality = preferences.getString("preferred_quality", null)
+        if (quality != null) {
+            val newList = mutableListOf<Video>()
+            var preferred = 0
+            for (video in this) {
+                if (video.videoTitle.contains(quality)) {
+                    newList.add(preferred, video)
+                    preferred++
+                } else {
+                    newList.add(video)
+                }
+            }
+            return newList
+        }
+        return this
     }
 
-    // ============================== Settings ==============================
+    override fun videoFromElement(element: Element) = throw UnsupportedOperationException()
+
+    override fun videoListSelector() = throw UnsupportedOperationException()
+
+    // Filters
+
+    override fun getFilterList() = AnimeFilterList(
+        AnimeFilter.Header("NOTE: Не работают при текстовом поиске!"),
+        AnimeFilter.Separator(),
+        GenreFilter(getGenreList()),
+        SortFilter(sortableList.map { it.first }.toTypedArray()),
+    )
+
+    private class GenreFilter(genres: Array<Pair<String, String>>) : UriPartFilter("Жанр", genres)
+
+    private fun getGenreList() = arrayOf(
+        Pair("Все", "all"),
+        Pair("Боевые искусства", "boyevyye-iskusstva"),
+        Pair("Война", "voyna"),
+        Pair("Драма", "drama"),
+        Pair("Детектив", "detektiv"),
+        Pair("История", "istoriya"),
+        Pair("Комедия", "komediya"),
+        Pair("Мистика", "mistika"),
+        Pair("Меха", "mekha"),
+        Pair("Махо-сёдзё", "makho-sedze"),
+        Pair("Музыкальный", "muzykalnyy"),
+        Pair("Повседневность", "povsednevnost"),
+        Pair("Приключения", "priklyucheniya"),
+        Pair("Пародия", "parodiya"),
+        Pair("Романтика", "romantika"),
+        Pair("Сёнэн", "senen"),
+        Pair("Сёдзё", "sedze"),
+        Pair("Спорт", "sport"),
+        Pair("Сказка", "skazka"),
+        Pair("Сёдзё-ай", "sedze-ay"),
+        Pair("Сёнэн-ай", "senen-ay"),
+        Pair("Самураи", "samurai"),
+        Pair("Триллер", "triller"),
+        Pair("Ужасы", "uzhasy"),
+        Pair("Фантастика", "fantastika"),
+        Pair("Фэнтези", "fentezi"),
+        Pair("Школа", "shkola"),
+        Pair("Этти", "etti"),
+    )
+
+    open class UriPartFilter(displayName: String, private val vals: Array<Pair<String, String>>) : AnimeFilter.Select<String>(displayName, vals.map { it.first }.toTypedArray()) {
+        override fun toString() = vals[state].second
+    }
+
+    private val sortableList = listOf(
+        Pair("Дате", SortBy.DATE),
+        Pair("Популярности", SortBy.RATING),
+        Pair("Посещаемости", SortBy.NEWS_READ),
+        Pair("Комментариям", SortBy.COMM_NUM),
+        Pair("Алфавиту", SortBy.TITLE),
+    )
+
+    class SortFilter(sortables: Array<String>) : AnimeFilter.Sort("Сортировать по", sortables, Selection(0, false))
+
+    // Settings
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
         screen.addListPreference(
-            key = PREF_QUALITY_KEY,
-            title = "Предпочитаемое качество",
+            key = "preferred_quality",
+            title = "Preferred quality",
             entries = listOf("720p", "480p"),
             entryValues = listOf("720", "480"),
-            default = PREF_QUALITY_DEFAULT,
+            default = "720",
             summary = "%s",
         )
-    }
-
-    // =============================== Utils ================================
-
-    private fun catalogRequest(page: Int): Request {
-        val url = "$API_URL/last".toHttpUrl().newBuilder()
-            .addQueryParameter("page", page.toString())
-            .addQueryParameter("quantity", PER_PAGE.toString())
-            .build()
-
-        return GET(url, headers)
-    }
-
-    private fun catalogParse(response: Response): AnimesPage {
-        val result = response.parseAs<ApiList>()
-        val animes = result.data.map { it.toSAnime() }
-        val page = result.state?.page ?: 1
-        val total = result.state?.count ?: 0
-
-        return AnimesPage(animes, page * PER_PAGE < total)
-    }
-
-    private fun infoRequest(id: String): Request = POST(
-        "$API_URL/info",
-        headers,
-        FormBody.Builder().add("id", id).build(),
-    )
-
-    private fun playlistRequest(id: String): Request = POST(
-        "$API_URL/playlist",
-        headers,
-        FormBody.Builder().add("id", id).build(),
-    )
-
-    private fun String.toId(): String = trimEnd('/').substringAfterLast('/')
-
-    private fun ApiAnime.toSAnime(): SAnime = SAnime.create().apply {
-        url = "/anime/$id"
-        title = this@toSAnime.title.replace(EPISODE_COUNT_REGEX, "").trim()
-        // У static.openni.ru просрочен сертификат Let's Encrypt (до 21.10.2026),
-        // поэтому https-картинки не загружаются. Тот же файл по http отдаётся
-        // нормально — переключаем схему только для этого хоста.
-        thumbnail_url = urlImagePreview?.let {
-            if (it.contains("static.openni.ru")) it.replaceFirst("https://", "http://") else it
-        }
-        genre = this@toSAnime.genre
-        author = director
-        description = buildString {
-            this@toSAnime.description
-                ?.replace(BR_REGEX, "\n")
-                ?.replace(TAG_REGEX, "")
-                ?.trim()
-                ?.let { appendLine(it) }
-            year?.takeIf { it.isNotBlank() }?.let { appendLine("\nГод выхода: $it") }
-            type?.takeIf { it.isNotBlank() }?.let { appendLine("Тип: $it") }
-        }.trim()
-        // "[1-25 из 26]" — вышло меньше, чем заявлено, значит ещё выходит.
-        status = STATUS_REGEX.find(this@toSAnime.title)?.let { match ->
-            val aired = match.groupValues[2].toIntOrNull() ?: 0
-            val total = match.groupValues[3].toIntOrNull() ?: 0
-            if (total > aired) SAnime.ONGOING else SAnime.COMPLETED
-        } ?: SAnime.COMPLETED
-    }
-
-    @Serializable
-    private data class ApiList(
-        val state: ApiState? = null,
-        val data: List<ApiAnime> = emptyList(),
-    )
-
-    @Serializable
-    private data class ApiState(
-        val page: Int = 1,
-        val count: Int = 0,
-    )
-
-    @Serializable
-    private data class ApiAnime(
-        val id: Long = 0,
-        val title: String = "",
-        val description: String? = null,
-        val genre: String? = null,
-        val year: String? = null,
-        val type: String? = null,
-        val director: String? = null,
-        val urlImagePreview: String? = null,
-    )
-
-    @Serializable
-    private data class ApiEpisode(
-        val name: String = "",
-        val hd: String? = null,
-        val std: String? = null,
-    )
-
-    companion object {
-        private const val API_URL = "https://api.animevost.org/v1"
-
-        /** API отдаёт максимум сорок записей за запрос, сколько ни проси. */
-        private const val PER_PAGE = 40
-
-        private const val PREF_QUALITY_KEY = "preferred_quality"
-        private const val PREF_QUALITY_DEFAULT = "720"
-
-        private val EPISODE_NUMBER_REGEX = Regex("""\d+""")
-
-        /** Хвост вида "[1-25 из 26]" в названии — он же признак онгоинга. */
-        private val EPISODE_COUNT_REGEX = Regex("""\s*\[[^\]]*]\s*$""")
-        private val STATUS_REGEX = Regex("""\[(\d+)-(\d+)\s+из\s+(\d+)]""")
-
-        private val BR_REGEX = Regex("""<br\s*/?>""")
-        private val TAG_REGEX = Regex("""<[^>]+>""")
     }
 }
