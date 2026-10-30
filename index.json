@@ -182,10 +182,10 @@
   {
     "name": "Aniyomi: Animevost",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.animevost",
-    "apk": "aniyomi-ru.animevost-v14.14.apk",
+    "apk": "aniyomi-ru.animevost-v14.15.apk",
     "lang": "ru",
-    "code": 14,
-    "version": "14.14",
+    "code": 15,
+    "version": "14.15",
     "nsfw": 0,
     "sources": [
       {
