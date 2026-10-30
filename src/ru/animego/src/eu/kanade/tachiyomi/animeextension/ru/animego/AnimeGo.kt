@@ -45,6 +45,8 @@ class AnimeGo :
 
     override val versionId = 1
 
+    override val baseUrl = "https://animego.studio"
+
     override val supportsLatest = true
 
     private val preferences by getPreferencesLazy()
