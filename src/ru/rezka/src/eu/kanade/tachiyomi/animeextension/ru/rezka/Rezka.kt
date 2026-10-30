@@ -175,9 +175,12 @@ class Rezka :
         // Отдельный клиент без этого перехватчика, иначе возможна рекурсия.
         val plain = network.client.newBuilder().build()
         plain.newCall(GET(url.toString(), headers)).execute().use { pass ->
-            pass.headers.values("Set-Cookie")
+            val cookies = pass.headers.values("Set-Cookie")
                 .map { it.substringBefore(";").trim() }
                 .filter { it.contains("=") }
+            // Оставляем только подтверждённую cookie: verification-пара
+            // заставляет сайт отвечать 301 на зеркало с формой входа.
+            (cookies.filter { it.contains("-auth-") }.ifEmpty { cookies })
                 .joinToString("; ")
                 .ifBlank { null }
         }
