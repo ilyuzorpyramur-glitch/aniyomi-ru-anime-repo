@@ -63,8 +63,7 @@ class AniJoy :
         .set("Accept", "application/json, text/plain, */*")
         .set("Accept-Language", "ru-RU,ru;q=0.9,en;q=0.8")
 
-    // =============================== Каталог ===============================
-
+    // =============================== Каталог =============================== 
     private fun catalogUrl(page: Int, sort: String, query: String?): String {
         val builder = "$apiUrl/anime".toHttpUrl().newBuilder()
             .addQueryParameter("page", page.toString())
@@ -74,13 +73,11 @@ class AniJoy :
         return builder.build().toString()
     }
 
-    override fun popularAnimeRequest(page: Int): Request =
-        GET(catalogUrl(page, DEFAULT_SORT, null), headers)
+    override fun popularAnimeRequest(page: Int): Request = GET(catalogUrl(page, DEFAULT_SORT, null), headers)
 
     override fun popularAnimeParse(response: Response): AnimesPage = parseCatalog(response)
 
-    override fun latestUpdatesRequest(page: Int): Request =
-        GET(catalogUrl(page, LATEST_SORT, null), headers)
+    override fun latestUpdatesRequest(page: Int): Request = GET(catalogUrl(page, LATEST_SORT, null), headers)
 
     override fun latestUpdatesParse(response: Response): AnimesPage = parseCatalog(response)
 
@@ -133,8 +130,7 @@ class AniJoy :
         return current
     }
 
-    // =============================== Детали ===============================
-
+    // =============================== Детали =============================== 
     override fun animeDetailsRequest(anime: SAnime): Request =
         GET("$apiUrl/anime/{id}".replace("{id}", anime.url), headers)
 
@@ -169,8 +165,7 @@ class AniJoy :
         else -> SAnime.UNKNOWN
     }
 
-    // =============================== Серии ================================
-
+    // =============================== Серии ================================ 
     override fun episodeListRequest(anime: SAnime): Request =
         GET("$apiUrl/anime/{id}/episodes".replace("{id}", anime.url), headers)
 
@@ -203,8 +198,7 @@ class AniJoy :
         dateFormat.parse(raw.take(10))?.time
     }.getOrNull() ?: 0L
 
-    // =============================== Видео ================================
-
+    // =============================== Видео ================================ 
     override suspend fun getVideoList(episode: SEpisode): List<Video> = withContext(Dispatchers.IO) {
         val number = episodeMeta[episode.url]?.second ?: episode.episode_number
         val videos = kodik.videos(episode.url, 1, number.toInt())
@@ -212,8 +206,7 @@ class AniJoy :
         videos
     }
 
-    // ============================== Настройки =============================
-
+    // ============================== Настройки ============================= 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
         ListPreference(screen.context).apply {
             key = KodikExtractor.PREF_QUALITY
@@ -237,8 +230,7 @@ class AniJoy :
     }
 
     companion object {
-        private const val USER_AGENT =
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+        private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
         private const val PER_PAGE = 24
