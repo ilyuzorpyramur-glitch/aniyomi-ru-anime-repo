@@ -245,7 +245,7 @@ class AniJoy :
 
         private const val PLAYER_HOST = "kodikplayer.com"
 
-        private val KODIK_HOST_REGEX = Regex("//kodik[a-z0-9.-]*\.[a-z]{2,}/")
+        private val KODIK_HOST_REGEX = Regex("""//kodik[a-z0-9.-]*\.[a-z]{2,}/""")
 
         private const val PER_PAGE = 24
         private const val DEFAULT_SORT = "popular"
