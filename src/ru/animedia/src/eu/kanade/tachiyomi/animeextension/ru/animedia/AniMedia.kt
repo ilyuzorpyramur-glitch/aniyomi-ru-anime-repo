@@ -238,27 +238,35 @@ class AniMedia :
         val hlsUrl = video.sources?.hlsUrl?.takeIf { it.isNotBlank() } ?: return emptyList()
         val label = item.voiceLabel
 
-        val extracted = playlistUtils.extractFromHls(
-            playlistUrl = hlsUrl,
-            referer = "$baseUrl/",
-            videoNameGen = { "$label - $it" },
-        )
-
-        // okcdn отдаёт варианты плейлиста путём «/expires/…»; при склейке
+        // okcdn отдаёт варианты плейлиста путём «/expires/…». При склейке
         // получается двойной слеш (okcdn.ru//expires/…), и CDN отвечает
-        // 400 Bad Request. Убираем дубль слеша после хоста.
-        return extracted
-            .map {
-                Video(
-                    url = it.url.squeezeSlashes(),
-                    quality = it.quality,
-                    videoUrl = it.videoUrl.squeezeSlashes(),
-                    headers = it.headers ?: apiHeaders(),
-                )
+        // 400 Bad Request, поэтому разбираем master-плейлист сами.
+        val master = client.newCall(GET(hlsUrl, apiHeaders())).awaitSuccess().bodyString()
+        val videos = mutableListOf<Video>()
+        var height = ""
+
+        for (raw in master.lineSequence()) {
+            val line = raw.trim()
+            if (line.startsWith("#EXT-X-STREAM-INF")) {
+                height = RESOLUTION_REGEX.find(line)?.groupValues?.get(1).orEmpty()
+            } else if (line.isNotEmpty() && !line.startsWith("#")) {
+                val resolved = resolveUrl(hlsUrl, line).squeezeSlashes()
+                val videoLabel = if (height.isBlank()) label else "$label - ${height}p"
+                videos += Video(resolved, videoLabel, resolved, headers = apiHeaders())
             }
-            .ifEmpty {
-                listOf(Video(hlsUrl, label, hlsUrl, headers = apiHeaders()))
-            }
+        }
+
+        return videos.ifEmpty {
+            listOf(Video(hlsUrl, label, hlsUrl, headers = apiHeaders()))
+        }
+    }
+
+    /** Склеивает относительную ссылку из плейлиста с адресом master-файла. */
+    private fun resolveUrl(base: String, path: String): String {
+        if (path.startsWith("http")) return path
+        val origin = base.substringBefore("/", "").let { base.substring(0, base.indexOf("//") + 2) + base.substringAfter("//").substringBefore("/") }
+        if (path.startsWith("/")) return origin + path
+        return base.substringBeforeLast("/") + "/" + path
     }
 
     // ============================== Settings ==============================
