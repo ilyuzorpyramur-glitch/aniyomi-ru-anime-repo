@@ -156,31 +156,36 @@ class Domanime :
     }
 
     private suspend fun kodikVideos(translation: String, seasonUrl: String, number: String): List<Video> {
-        if (seasonUrl.isEmpty()) return emptyList()
+        val dbg = StringBuilder()
+        if (seasonUrl.isEmpty()) throw Exception("dbg: пустой seasonUrl")
 
         val seasonPage = client.newCall(GET(seasonUrl, headers)).awaitSuccess().bodyText()
-        val option = Jsoup.parse(seasonPage).select(".serial-series-box option")
-            .firstOrNull { it.attr("value").toIntOrNull() == number.toIntOrNull() }
-            ?: return emptyList()
+        dbg.append("seasonLen=").append(seasonPage.length)
+        val options = Jsoup.parse(seasonPage).select(".serial-series-box option")
+        dbg.append(" opts=").append(options.size)
+        val option = options.firstOrNull { it.attr("value").toIntOrNull() == number.toIntOrNull() }
+            ?: throw Exception("dbg: $dbg нет опции $number")
 
-        val id = option.attr("data-id").takeIf { it.isNotBlank() } ?: return emptyList()
-        val hash = option.attr("data-hash").takeIf { it.isNotBlank() } ?: return emptyList()
+        val id = option.attr("data-id")
+        val hash = option.attr("data-hash")
+        dbg.append(" id=").append(id).append(" hash=").append(hash.take(8))
+
         val playerUrl = "https://kodikplayer.com/seria/$id/$hash/720p"
         val playerPage = client.newCall(GET(playerUrl, headers)).awaitSuccess().bodyText()
+        dbg.append(" playerLen=").append(playerPage.length)
 
         val params = URL_PARAMS_REGEX.find(playerPage)?.groupValues?.get(1)
             ?.let { runCatching { JSONObject(it) }.getOrNull() }
-            ?: return emptyList()
-        if (params.optString("pd").isEmpty()) return emptyList()
+            ?: throw Exception("dbg: $dbg нет urlParams")
 
         val host = params.optString("pd")
+        dbg.append(" pd=").append(host)
+
         val form = FormBody.Builder()
             .add("d", params.optString("d"))
             .add("d_sign", params.optString("d_sign"))
             .add("pd", host)
             .add("pd_sign", params.optString("pd_sign"))
-            // ref в urlParams лежит percent-encoded ("https%3A%2F%2Fdomanime.ru%2F").
-            // FormBody кодирует повторно, поэтому сначала раскодируем сами.
             .add("ref", URLDecoder.decode(params.optString("ref"), "UTF-8"))
             .add("ref_sign", params.optString("ref_sign"))
             .add("type", "seria")
@@ -188,8 +193,6 @@ class Domanime :
             .add("hash", hash)
             .build()
 
-        // Kodik сверяет Referer и Origin с доменом-источником. С собственным
-        // Referer он отвечает 500 и текстом «данной страницы не существует».
         val apiHeaders = Headers.Builder()
             .set("Referer", "$baseUrl/")
             .set("Origin", baseUrl)
@@ -197,24 +200,32 @@ class Domanime :
             .set("User-Agent", UA)
             .build()
 
-        val videoHeaders = Headers.Builder()
-            .set("Referer", "https://$host/")
-            .set("User-Agent", UA)
-            .build()
-
         val body = client.newCall(POST("https://$host/ftor", apiHeaders, form)).awaitSuccess().bodyText()
-        val links = runCatching { JSONObject(body).optJSONObject("links") }.getOrNull() ?: return emptyList()
+        dbg.append(" bodyLen=").append(body.length)
+            .append(" head=").append(body.take(30).replace("\n", " "))
+
+        val links = runCatching { JSONObject(body).optJSONObject("links") }.getOrNull()
+            ?: throw Exception("dbg: $dbg нет links")
+
+        val keys = links.keys().asSequence().toList()
+        dbg.append(" keys=").append(keys)
 
         val result = mutableListOf<Video>()
+        var decodeFails = 0
         links.keys().asSequence().sortedByDescending { it.toIntOrNull() ?: 0 }.forEach { quality ->
             val array = links.optJSONArray(quality) ?: return@forEach
             for (index in 0 until array.length()) {
                 val source = array.optJSONObject(index) ?: continue
-                val link = decodeSource(source.optString("src")) ?: continue
-                result += Video(link, "$translation · ${quality}p", link, headers = videoHeaders)
+                val link = decodeSource(source.optString("src"))
+                if (link == null) {
+                    decodeFails++
+                    continue
+                }
+                result += Video(link, "$translation · ${quality}p", link)
             }
         }
 
+        if (result.isEmpty()) throw Exception("dbg: $dbg decodeFails=$decodeFails")
         return result.distinctBy { it.videoUrl }
     }
 
