@@ -349,24 +349,6 @@
     ]
   },
   {
-    "name": "Aniyomi: JustSu",
-    "pkg": "eu.kanade.tachiyomi.animeextension.ru.justsu",
-    "apk": "aniyomi-ru.justsu-v14.2.apk",
-    "lang": "ru",
-    "code": 2,
-    "version": "14.2",
-    "nsfw": 0,
-    "sources": [
-      {
-        "name": "JustSu",
-        "lang": "ru",
-        "id": "292877448115528956",
-        "baseUrl": "https://just-su.org",
-        "versionId": 1
-      }
-    ]
-  },
-  {
     "name": "Aniyomi: Jut-su.net",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.jutsunet",
     "apk": "aniyomi-ru.jutsunet-v14.3.apk",
@@ -379,6 +361,24 @@
         "name": "Jut-su.net",
         "lang": "ru",
         "id": "8695730352083027493",
+        "baseUrl": "https://jut-su.net",
+        "versionId": 1
+      }
+    ]
+  },
+  {
+    "name": "Aniyomi: Jutsu",
+    "pkg": "eu.kanade.tachiyomi.animeextension.ru.justsu",
+    "apk": "aniyomi-ru.justsu-v14.3.apk",
+    "lang": "ru",
+    "code": 3,
+    "version": "14.3",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "Jutsu",
+        "lang": "ru",
+        "id": "1054674958185432139",
         "baseUrl": "https://jut-su.net",
         "versionId": 1
       }
