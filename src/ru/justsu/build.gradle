@@ -1,7 +1,7 @@
 ext {
-    extName = 'JustSu'
+    extName = 'Jutsu'
     extClass = '.JustSu'
-    extVersionCode = 2
+    extVersionCode = 3
     isNsfw = false
 }
 
