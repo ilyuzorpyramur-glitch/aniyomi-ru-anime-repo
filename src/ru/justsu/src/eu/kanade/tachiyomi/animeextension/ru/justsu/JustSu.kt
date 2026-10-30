@@ -172,8 +172,8 @@ class JustSu :
 
             return@runBlocking grouped.entries
                 .sortedWith(
-                    compareByDescending<Map.Entry<Pair<Int, Float>, List<PlaylistItemDto>>> { it.key.first }
-                        .thenByDescending { it.key.second },
+                    compareBy<Map.Entry<Pair<Int, Float>, List<PlaylistItemDto>>> { it.key.first }
+                        .thenBy { it.key.second },
                 )
                 .map { (key, items) ->
                     val season = key.first
