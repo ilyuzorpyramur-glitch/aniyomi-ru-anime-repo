@@ -34,8 +34,8 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import org.jsoup.nodes.Document
 import org.json.JSONObject
+import org.jsoup.nodes.Document
 import kotlin.time.Duration.Companion.seconds
 
 class Rezka :
