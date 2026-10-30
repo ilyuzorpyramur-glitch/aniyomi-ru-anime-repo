@@ -79,12 +79,17 @@ class Domanime :
             description = doc.selectFirst("meta[property=og:description]")?.attr("content")
                 ?.takeIf { it.isNotBlank() }
                 ?: doc.selectFirst("meta[name=description]")?.attr("content")
-            genre = doc.select("div.movie-info a[href^=/]").map { it.text().trim() }
-                .filter { it.isNotBlank() && it.length < 24 }
-                .distinct()
-                .take(10)
-                .joinToString(", ")
-                .ifBlank { null }
+            // Жанры лежат в списке характеристик: <li><span>Жанр:</span> боевик, фэнтези</li>
+            genre = doc.select("ul.inner-page__list > li")
+                .firstOrNull { it.selectFirst("span")?.text()?.startsWith("Жанр") == true }
+                ?.text()
+                ?.substringAfter(":", "")
+                ?.split(",")
+                ?.map { it.trim() }
+                ?.filter { it.isNotBlank() }
+                ?.take(10)
+                ?.joinToString(", ")
+                ?.ifBlank { null }
             status = SAnime.UNKNOWN
         }
     }
@@ -177,9 +182,11 @@ class Domanime :
             .add("hash", hash)
             .build()
 
+        // Kodik сверяет Referer и Origin с доменом-источником. С собственным
+        // Referer он отвечает 500 и текстом «данной страницы не существует».
         val apiHeaders = Headers.Builder()
-            .set("Referer", "$host/".let { "https://$it" })
-            .set("Origin", "https://$host")
+            .set("Referer", "$baseUrl/")
+            .set("Origin", baseUrl)
             .set("X-Requested-With", "XMLHttpRequest")
             .set("User-Agent", UA)
             .build()
