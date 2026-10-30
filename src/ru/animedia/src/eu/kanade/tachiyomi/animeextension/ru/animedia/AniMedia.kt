@@ -14,9 +14,9 @@ import eu.kanade.tachiyomi.network.awaitSuccess
 import keiyoushi.utils.AnimeHttpLegacySource
 import keiyoushi.utils.addListPreference
 import keiyoushi.utils.addSwitchPreference
+import keiyoushi.utils.bodyString
 import keiyoushi.utils.getPreferencesLazy
 import keiyoushi.utils.parallelCatchingFlatMap
-import keiyoushi.utils.bodyString
 import keiyoushi.utils.parseAs
 import keiyoushi.utils.useAsJsoup
 import kotlinx.coroutines.runBlocking
@@ -265,7 +265,8 @@ class AniMedia :
     /** Склеивает относительную ссылку из плейлиста с адресом master-файла. */
     private fun resolveUrl(base: String, path: String): String {
         if (path.startsWith("http")) return path
-        val origin = base.substringBefore("/", "").let { base.substring(0, base.indexOf("//") + 2) + base.substringAfter("//").substringBefore("/") }
+        val scheme = base.substring(0, base.indexOf("//") + 2)
+        val origin = scheme + base.substringAfter("//").substringBefore("/")
         if (path.startsWith("/")) return origin + path
         return base.substringBeforeLast("/") + "/" + path
     }
