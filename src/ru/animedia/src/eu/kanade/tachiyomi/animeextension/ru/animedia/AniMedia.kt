@@ -238,13 +238,27 @@ class AniMedia :
         val hlsUrl = video.sources?.hlsUrl?.takeIf { it.isNotBlank() } ?: return emptyList()
         val label = item.voiceLabel
 
-        return playlistUtils.extractFromHls(
+        val extracted = playlistUtils.extractFromHls(
             playlistUrl = hlsUrl,
             referer = "$baseUrl/",
             videoNameGen = { "$label - $it" },
-        ).ifEmpty {
-            listOf(Video(hlsUrl, label, hlsUrl, headers = apiHeaders()))
-        }
+        )
+
+        // okcdn отдаёт варианты плейлиста путём «/expires/…»; при склейке
+        // получается двойной слеш (okcdn.ru//expires/…), и CDN отвечает
+        // 400 Bad Request. Убираем дубль слеша после хоста.
+        return extracted
+            .map {
+                Video(
+                    url = it.url.squeezeSlashes(),
+                    quality = it.quality,
+                    videoUrl = it.videoUrl.squeezeSlashes(),
+                    headers = it.headers ?: apiHeaders(),
+                )
+            }
+            .ifEmpty {
+                listOf(Video(hlsUrl, label, hlsUrl, headers = apiHeaders()))
+            }
     }
 
     // ============================== Settings ==============================
@@ -340,6 +354,9 @@ class AniMedia :
     private fun Float.formatNumber(): String = if (this % 1f == 0f) toInt().toString() else toString()
 
     private fun String.parseQuality(): Int = QUALITY_REGEX.find(this)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+
+    /** Убирает двойной слеш после хоста: okcdn.ru//expires → okcdn.ru/expires. */
+    private fun String.squeezeSlashes(): String = replace(Regex("(?<=^https?://[^/]{1,80})//+"), "/")
 
     companion object {
         private const val API_URL = "https://plapi.cdnvideohub.com/api/v1"
