@@ -177,7 +177,12 @@ class AnimevostSource(override val name: String, override val baseUrl: String) :
     private fun ApiAnime.toSAnime(): SAnime = SAnime.create().apply {
         url = "/anime/$id"
         title = this@toSAnime.title.replace(EPISODE_COUNT_REGEX, "").trim()
-        thumbnail_url = urlImagePreview
+        // У static.openni.ru просрочен сертификат Let's Encrypt (до 21.10.2026),
+        // поэтому https-картинки не загружаются. Тот же файл по http отдаётся
+        // нормально — переключаем схему только для этого хоста.
+        thumbnail_url = urlImagePreview?.let {
+            if (it.contains("static.openni.ru")) it.replaceFirst("https://", "http://") else it
+        }
         genre = this@toSAnime.genre
         author = director
         description = buildString {
