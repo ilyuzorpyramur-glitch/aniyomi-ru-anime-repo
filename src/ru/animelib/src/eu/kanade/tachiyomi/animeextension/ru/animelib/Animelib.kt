@@ -242,7 +242,7 @@ class Animelib :
     override fun episodeListParse(response: Response): List<SEpisode> {
         val episodeList = response.parseAs<EpisodeList>()
 
-        return episodeList.data.map { it.toSEpisode() }.reversed()
+        return episodeList.data.map { it.toSEpisode() }
     }
 
     // =============================== Video List ===============================

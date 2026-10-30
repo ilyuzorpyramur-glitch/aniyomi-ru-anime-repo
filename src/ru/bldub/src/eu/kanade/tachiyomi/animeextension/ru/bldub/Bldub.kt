@@ -136,7 +136,7 @@ class Bldub :
                     scanlator = usable.joinToString(", ") { it.translation }
                 }
             }
-            .sortedByDescending { it.episode_number }
+            .sortedBy { it.episode_number }
     }
 
     // ============================ Video Links =============================

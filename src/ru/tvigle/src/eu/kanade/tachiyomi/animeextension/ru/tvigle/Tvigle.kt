@@ -245,7 +245,7 @@ class Tvigle : AnimeHttpLegacySource() {
                     }
                     episode_number = (season * EPISODE_SEASON_STEP + series).toFloat()
                 }
-            }.sortedByDescending { it.episode_number }
+            }.sortedBy { it.episode_number }
     }
 
     /** Серий у сериала бывают сотни — тянем каталог страницами до конца. */

@@ -261,7 +261,7 @@ class AniDub :
                 episode_number = EPISODE_NUMBER_REGEX.find(label)?.value?.toFloatOrNull() ?: (index + 1f)
                 scanlator = "AniDub"
             }
-        }.sortedByDescending { it.episode_number }
+        }.sortedBy { it.episode_number }
     }
 
     // =============================== Video ================================

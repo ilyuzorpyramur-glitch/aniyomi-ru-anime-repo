@@ -35,6 +35,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.nodes.Document
+import org.json.JSONObject
 import kotlin.time.Duration.Companion.seconds
 
 class Rezka :
@@ -69,6 +70,85 @@ class Rezka :
     // already is a browser UA. `super.headersBuilder()` keeps it, so it also stays current.
     override fun headersBuilder(): Headers.Builder = super.headersBuilder()
         .add("Referer", "$baseUrl/")
+
+    // hdrezka отдаёт «Проверяем, что вы не бот!» (Anubis, proof-of-work) части IP,
+    // в том числе серверным. Челлендж решается локально: sha256(randomData + nonce)
+    // с нужным числом ведущих нулей, затем pass-challenge выдаёт cookie.
+    @Volatile
+    private var anubisCookie: String? = null
+
+    override val client: OkHttpClient = network.client.newBuilder()
+        .addInterceptor { chain ->
+            val original = chain.request()
+            val known = anubisCookie
+            val request = if (known != null && original.header("Cookie") == null) {
+                original.newBuilder().header("Cookie", known).build()
+            } else {
+                original
+            }
+            val response = chain.proceed(request)
+            if (request.url.encodedPath.contains(ANUBIS_PASS) || !isAnubisChallenge(response)) {
+                return@addInterceptor response
+            }
+            val cookie = solveAnubis(response) ?: return@addInterceptor response
+            anubisCookie = cookie
+            response.close()
+            chain.proceed(request.newBuilder().header("Cookie", cookie).build())
+        }
+        .build()
+
+    private fun isAnubisChallenge(response: Response): Boolean = runCatching {
+        if (!response.isSuccessful) return@runCatching false
+        val type = response.body?.contentType()?.toString().orEmpty()
+        if (!type.contains("html")) return@runCatching false
+        response.peekBody(ANUBIS_PEEK).string().contains("anubis_challenge")
+    }.getOrDefault(false)
+
+    private fun solveAnubis(response: Response): String? = runCatching {
+        val html = response.peekBody(ANUBIS_PEEK).string()
+        val raw = CHALLENGE_REGEX.find(html)?.groupValues?.get(1) ?: return@runCatching null
+        val challenge = JSONObject(raw)
+        val payload = challenge.getJSONObject("challenge")
+        val data = payload.getString("randomData")
+        val difficulty = payload.optInt(
+            "difficulty",
+            challenge.optJSONObject("rules")?.optInt("difficulty") ?: 0,
+        )
+        val target = "0".repeat(difficulty)
+
+        val started = System.currentTimeMillis()
+        val sha = java.security.MessageDigest.getInstance("SHA-256")
+        var nonce = 0L
+        var hash: String
+        while (true) {
+            hash = sha.digest((data + nonce).toByteArray()).toHex()
+            if (hash.startsWith(target)) break
+            nonce++
+        }
+        // Слишком быстрое решение сервер не принимает.
+        val elapsed = (System.currentTimeMillis() - started).coerceAtLeast(300L)
+
+        val prefix = PREFIX_REGEX.find(html)?.groupValues?.get(1) ?: ANUBIS_DEFAULT_PREFIX
+        val url = "$baseUrl$prefix/pass-challenge".toHttpUrl().newBuilder()
+            .addQueryParameter("id", payload.getString("id"))
+            .addQueryParameter("response", hash)
+            .addQueryParameter("nonce", nonce.toString())
+            .addQueryParameter("redir", "/")
+            .addQueryParameter("elapsedTime", elapsed.toString())
+            .build()
+
+        // Отдельный клиент без этого перехватчика, иначе возможна рекурсия.
+        val plain = network.client.newBuilder().build()
+        plain.newCall(GET(url.toString(), headers)).execute().use { pass ->
+            pass.headers.values("Set-Cookie")
+                .map { it.substringBefore(";").trim() }
+                .filter { it.contains("=") }
+                .joinToString("; ")
+                .ifBlank { null }
+        }
+    }.getOrNull()
+
+    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
     // get_cdn_series either answers within a second or hangs; cap it so a hang falls
     // through to the error path instead of holding the player for the app's 2-minute limit.

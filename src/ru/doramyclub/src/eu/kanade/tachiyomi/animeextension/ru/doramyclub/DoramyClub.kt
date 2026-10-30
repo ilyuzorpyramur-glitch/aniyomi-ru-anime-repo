@@ -184,7 +184,7 @@ class DoramyClub :
                 episode_number = number
                 name = "${number.toInt()} серия"
             }
-        }.sortedByDescending { it.episode_number }
+        }.sortedBy { it.episode_number }
     }
 
     // ============================ Video Links =============================

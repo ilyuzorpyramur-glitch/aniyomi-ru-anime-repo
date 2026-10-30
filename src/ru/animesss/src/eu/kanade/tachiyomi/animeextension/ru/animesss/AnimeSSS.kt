@@ -205,7 +205,7 @@ class AnimeSSS :
                 episode_number = value.toFloatOrNull() ?: 1f
                 name = option.attr("data-title").trim().ifBlank { "Серия $value" }
             }
-        }.sortedByDescending { it.episode_number }
+        }.sortedBy { it.episode_number }
     }
 
     // ============================ Video Links =============================
