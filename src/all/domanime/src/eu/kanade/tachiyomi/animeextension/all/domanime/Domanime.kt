@@ -212,20 +212,26 @@ class Domanime :
 
         val result = mutableListOf<Video>()
         var decodeFails = 0
+        var firstFail = ""
         links.keys().asSequence().sortedByDescending { it.toIntOrNull() ?: 0 }.forEach { quality ->
             val array = links.optJSONArray(quality) ?: return@forEach
             for (index in 0 until array.length()) {
                 val source = array.optJSONObject(index) ?: continue
-                val link = decodeSource(source.optString("src"))
+                val decoded = runCatching { decodeSource(source.optString("src")) }
+                val link = decoded.getOrNull()
                 if (link == null) {
                     decodeFails++
+                    if (firstFail.isEmpty()) {
+                        firstFail = "src=" + source.optString("src").take(45) +
+                            " err=" + (decoded.exceptionOrNull()?.toString() ?: "нет http").take(70)
+                    }
                     continue
                 }
                 result += Video(link, "$translation · ${quality}p", link)
             }
         }
 
-        if (result.isEmpty()) throw Exception("dbg: $dbg decodeFails=$decodeFails")
+        if (result.isEmpty()) throw Exception("dbg: $dbg fails=$decodeFails first=$firstFail")
         return result.distinctBy { it.videoUrl }
     }
 
