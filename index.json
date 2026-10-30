@@ -333,10 +333,10 @@
   {
     "name": "Aniyomi: HDRezka",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.rezka",
-    "apk": "aniyomi-ru.rezka-v14.1.apk",
+    "apk": "aniyomi-ru.rezka-v14.2.apk",
     "lang": "ru",
-    "code": 1,
-    "version": "14.1",
+    "code": 2,
+    "version": "14.2",
     "nsfw": 0,
     "sources": [
       {
@@ -387,10 +387,10 @@
   {
     "name": "Aniyomi: Jutsu TV",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.jutsutv",
-    "apk": "aniyomi-ru.jutsutv-v14.1.apk",
+    "apk": "aniyomi-ru.jutsutv-v14.2.apk",
     "lang": "ru",
-    "code": 1,
-    "version": "14.1",
+    "code": 2,
+    "version": "14.2",
     "nsfw": 0,
     "sources": [
       {
