@@ -323,8 +323,7 @@ class Domanime :
         else -> emptyList()
     }
 
-    private fun JSONArray?.toNumbers(): List<Int> =
-        if (this == null) emptyList() else (0 until length()).mapNotNull { optInt(it).takeIf { n -> n > 0 } }
+    private fun JSONArray?.toNumbers(): List<Int> = if (this == null) emptyList() else (0 until length()).mapNotNull { optInt(it).takeIf { n -> n > 0 } }
 
     private fun Response.bodyText(): String {
         val bytes = peekBody(Long.MAX_VALUE).bytes()
