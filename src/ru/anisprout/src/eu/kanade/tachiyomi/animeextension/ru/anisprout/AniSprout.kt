@@ -378,7 +378,7 @@ class AniSprout :
         return SAnime.create().apply {
             url = path
             title = link.text().unquote()
-            thumbnail_url = posterOf(this) ?: parent()?.let { posterOf(it) }
+            thumbnail_url = posterOf(this@toSAnimeFromCard) ?: parent()?.let { posterOf(it) }
         }
     }
 
