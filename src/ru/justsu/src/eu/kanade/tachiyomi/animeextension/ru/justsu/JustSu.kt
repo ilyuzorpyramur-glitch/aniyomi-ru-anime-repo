@@ -2,28 +2,26 @@ package eu.kanade.tachiyomi.animeextension.ru.justsu
 
 import android.net.Uri
 import android.util.Base64
-import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import aniyomi.lib.playlistutils.PlaylistUtils
-import app.cash.quickjs.QuickJs
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
-import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
-import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
-import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
-import eu.kanade.tachiyomi.util.asJsoup
+import eu.kanade.tachiyomi.network.awaitSuccess
+import keiyoushi.utils.AnimeHttpLegacySource
+import keiyoushi.utils.addListPreference
+import keiyoushi.utils.addSwitchPreference
 import keiyoushi.utils.bodyString
-import keiyoushi.utils.get
 import keiyoushi.utils.getPreferencesLazy
+import keiyoushi.utils.parallelCatchingFlatMap
 import keiyoushi.utils.parseAs
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import keiyoushi.utils.useAsJsoup
+import kotlinx.coroutines.runBlocking
 import okhttp3.FormBody
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -34,607 +32,530 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
 class JustSu :
-    AnimeHttpSource(),
+    AnimeHttpLegacySource(),
     ConfigurableAnimeSource {
 
-    override val name = "Jutsu"
+    override val name = "JustSu"
+
+    override val baseUrl = "https://just-su.org"
 
     override val lang = "ru"
 
-    override val versionId = 1
-
-    override val baseUrl = "https://jut-su.net"
-
     override val supportsLatest = true
-
-    // The DLE search is a loose full-text match over posts, so a title query also drags in
-    // news, articles and other unrelated topics.
-    override val disableRelatedAnimesBySearch = true
 
     private val preferences by getPreferencesLazy()
 
-    override fun headersBuilder(): Headers.Builder = super.headersBuilder()
-        .add("Referer", "$baseUrl/")
+    private val playlistUtils by lazy { PlaylistUtils(client, headers) }
+
+    override fun headersBuilder() = super.headersBuilder()
+        .set("Referer", "$baseUrl/")
+        .set(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+                "Chrome/124.0.0.0 Safari/537.36",
+        )
 
     // ============================== Popular ===============================
 
-    // "Топ 100" — a single page with the 100 most popular titles.
-    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/top/", headers)
+    override fun popularAnimeRequest(page: Int): Request = listRequest("/vyshlo/", page)
 
-    private fun popularAnimeSelector(): String = "div.krasik"
-
-    private fun popularAnimeNextPageSelector(): String? = null
-
-    private fun popularAnimeFromElement(element: Element): SAnime = SAnime.create().apply {
-        val link = element.selectFirst("a.krasik__title")!!
-        setUrlWithoutDomain(link.attr("href"))
-        title = link.text()
-        thumbnail_url = element.selectFirst("div.krasik__img img")?.absUrl("src")
-    }
-
-    override fun popularAnimeParse(response: Response): AnimesPage {
-        val document = response.asJsoup()
-        val animes = document.select(popularAnimeSelector()).map { popularAnimeFromElement(it) }
-        val hasNextPage = popularAnimeNextPageSelector()?.let { document.selectFirst(it) != null } == true
-        return AnimesPage(animes, hasNextPage)
-    }
+    override fun popularAnimeParse(response: Response): AnimesPage = listParse(response)
 
     // =============================== Latest ===============================
 
-    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/anime/page/$page/", headers)
+    override fun latestUpdatesRequest(page: Int): Request = listRequest("/ongoing/", page)
 
-    override fun latestUpdatesParse(response: Response): AnimesPage {
-        val document = response.asJsoup()
-        val animes = document.select(popularAnimeSelector()).map { popularAnimeFromElement(it) }
-        val hasNextPage = document.selectFirst("div.pagination__pages span:not(.nav_ext) + a") != null
-        return AnimesPage(animes, hasNextPage)
-    }
+    override fun latestUpdatesParse(response: Response): AnimesPage = listParse(response)
 
     // =============================== Search ===============================
 
-    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
+    override fun searchAnimeRequest(
+        page: Int,
+        query: String,
+        filters: AnimeFilterList,
+    ): Request {
         if (query.isNotBlank()) {
-            if (query.length < 4) throw Exception("Минимальная длина поискового запроса — 4 символа")
-
-            val postHeaders = headers.newBuilder()
-                .add("Origin", baseUrl)
-                .build()
-
             val body = FormBody.Builder()
                 .add("do", "search")
                 .add("subaction", "search")
-                .apply {
-                    if (page > 1) {
-                        add("search_start", page.toString())
-                        add("full_search", "0")
-                        add("result_from", ((page - 1) * 10 + 1).toString())
-                    }
-                }
                 .add("story", query)
+                .add("search_start", page.toString())
+                .add("full_search", "0")
+                .add("result_from", (((page - 1) * SEARCH_PAGE_SIZE) + 1).toString())
                 .build()
 
-            return if (page == 1) {
-                POST("$baseUrl/", body = body, headers = postHeaders)
-            } else {
-                POST("$baseUrl/index.php?do=search", body = body, headers = postHeaders)
-            }
+            return POST("$baseUrl/index.php?do=search", headers, body)
         }
 
-        val filterList = if (filters.isEmpty()) getFilterList() else filters
-        val category = filterList.filterIsInstance<CategoryFilter>().firstOrNull()?.toUriPart()
-        val genre = filterList.filterIsInstance<GenreFilter>().firstOrNull()?.toUriPart()
-        val year = filterList.filterIsInstance<YearFilter>().firstOrNull()?.toUriPart()
-
-        return when {
-            !genre.isNullOrBlank() -> GET("$baseUrl${genre}page/$page/", headers)
-            !year.isNullOrBlank() -> GET("$baseUrl${year}page/$page/", headers)
-            !category.isNullOrBlank() -> GET("$baseUrl${category}page/$page/", headers)
-            else -> latestUpdatesRequest(page)
-        }
+        return listRequest(JustSuFilters.getSearchParameters(filters).path, page)
     }
 
-    override fun searchAnimeParse(response: Response): AnimesPage {
-        val document = response.asJsoup()
-        val animes = document.select(popularAnimeSelector()).map { popularAnimeFromElement(it) }
-        val hasNextPage = document.selectFirst("div.pagination__pages span:not(.nav_ext) + a") != null
-        return AnimesPage(animes, hasNextPage)
-    }
+    override fun searchAnimeParse(response: Response): AnimesPage = listParse(response)
 
-    // ============================== Filters ===============================
-
-    override fun getFilterList(): AnimeFilterList = AnimeFilterList(
-        AnimeFilter.Header("Фильтры не работают при текстовом поиске"),
-        CategoryFilter(),
-        GenreFilter(),
-        YearFilter(),
-    )
-
-    private open class UriPartFilter(displayName: String, val vals: Array<Pair<String, String>>) : AnimeFilter.Select<String>(displayName, vals.map { it.first }.toTypedArray()) {
-        fun toUriPart() = vals[state].second
-    }
-
-    private class CategoryFilter :
-        UriPartFilter(
-            "Категория",
-            arrayOf(
-                "Все" to "",
-                "Сериалы" to "/tv-series/",
-                "ONA" to "/ona/",
-                "OVA" to "/ova/",
-                "Спешл" to "/special/",
-                "Онгоинги" to "/ongoing/",
-                "Китайские" to "/anime/chinese/",
-                "С субтитрами" to "/anime/subtitles/",
-                "DEEP" to "/anime/deep/",
-                "Netflix" to "/anime/netflix/",
-            ),
-        )
-
-    private class YearFilter :
-        UriPartFilter(
-            "Год",
-            arrayOf(
-                "Все" to "",
-                "2026" to "/anime/2026/",
-                "2025" to "/anime/2025/",
-                "2024" to "/anime/2024/",
-                "2023" to "/anime/2023/",
-                "2022" to "/anime/2022/",
-                "2021" to "/anime/2021/",
-            ),
-        )
-
-    private class GenreFilter :
-        UriPartFilter(
-            "Жанр",
-            arrayOf(
-                "Все" to "",
-                "Боевые искусства" to "/anime/martial-arts/",
-                "Военные" to "/anime/military/",
-                "Выживание" to "/anime/survival/",
-                "Гарем" to "/anime/harem/",
-                "Детективы" to "/anime/detective/",
-                "Драмы" to "/anime/drama/",
-                "Игры" to "/anime/game/",
-                "Исекай" to "/anime/isekai/",
-                "Исторические" to "/anime/historical/",
-                "Комедия" to "/anime/comedy/",
-                "Кулинария" to "/anime/cooking/",
-                "Магия" to "/anime/magic/",
-                "Меха" to "/anime/mecha/",
-                "Мистика" to "/anime/mystic/",
-                "Музыка" to "/anime/music/",
-                "Повседневность" to "/anime/slice-of-life/",
-                "Приключения" to "/anime/adventure/",
-                "Психология" to "/anime/psychological/",
-                "Реинкарнация" to "/anime/reincarnation/",
-                "Романтика" to "/anime/romance/",
-                "Сверхъестественное" to "/anime/supernatural/",
-                "Спортивные" to "/anime/sports/",
-                "Триллеры" to "/anime/suspense/",
-                "Ужасы" to "/anime/horror/",
-                "Фантастика" to "/anime/sci-fi/",
-                "Фэнтези" to "/anime/fantasy/",
-                "Школа" to "/anime/school/",
-                "Экшены" to "/anime/action/",
-                "Этти" to "/anime/ecchi/",
-            ),
-        )
+    override fun getFilterList(): AnimeFilterList = JustSuFilters.FILTER_LIST
 
     // =========================== Anime Details ============================
 
+    override fun animeDetailsRequest(anime: SAnime): Request = GET(baseUrl + anime.url, headers)
+
+    override fun getAnimeUrl(anime: SAnime): String = baseUrl + anime.url
+
     override fun animeDetailsParse(response: Response): SAnime {
-        val document = response.asJsoup()
+        val document = response.useAsJsoup()
+
+        fun row(label: String): String? = document.select(".pmovie__anime, .pmovie__list li")
+            .firstOrNull { it.text().trim().startsWith(label) }
+            ?.text()
+            ?.substringAfter(':')
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+
         return SAnime.create().apply {
-            title = document.selectFirst("h1")?.text()
-                ?: throw Exception("Название не найдено")
-            thumbnail_url = document.selectFirst("div.zfx__img img")?.absUrl("src")
-
-            // The synopsis lives in the "Описание аниме …" block; everything else on the
-            // page (menus, SEO text in --main) must not leak into the description.
-            description = document
-                .selectFirst("div.jutsutv-zfx__text--top div.full-text, div.jutsutv-zfx__text--top p")
-                ?.text()
-
-            genre = document.select("ul.jutsutv-zfx__list li:has(span:contains(Жанр)) a")
-                .joinToString { it.text() }
-            // Студия; если её нет на странице — имя режиссёра.
-            // ("Режисс" покрывает оба написания: «Режиссер» и «Режиссёр».)
-            author = document.selectFirst("ul.jutsutv-zfx__list li:has(span:contains(Студия))")
-                ?.text()?.substringAfter(":")?.trim()?.takeIf { it.isNotBlank() }
-                ?: document.selectFirst("ul.jutsutv-zfx__list li:has(span:contains(Режисс))")
-                    ?.text()?.substringAfter(":")?.trim()
-
-            // The status <li> carries a malformed attribute (=""), which some parsers choke
-            // on — fall back from the label span to the li text to a whole-page regex.
-            val statusText = document.selectFirst("span.jutsutv-jutsu-page__info-label")?.text()
-                ?: document.select("li").firstOrNull { it.text().contains("Статус:") }?.text()
-                ?: STATUS_REGEX.find(document.text())?.groupValues?.get(1)
-                ?: ""
-            status = when {
-                statusText.contains("Онгоинг", ignoreCase = true) -> SAnime.ONGOING
-                // Aniyomi has no dedicated "announced" status — the closest one is ONGOING.
-                statusText.contains("Анонс", ignoreCase = true) -> SAnime.ONGOING
-                statusText.contains("Вышел", ignoreCase = true) -> SAnime.COMPLETED
-                else -> SAnime.UNKNOWN
-            }
+            url = response.request.url.encodedPath
+            title = document.selectFirst("h1")?.text()?.trim().orEmpty()
+            thumbnail_url = document.selectFirst("meta[property=og:image]")?.attr("content")
+            genre = document.select(".pmovie__genres a, .pmovie__anime a")
+                .map { it.text().trim() }
+                .filterNot { it.isBlank() || it.toIntOrNull() != null }
+                .distinct()
+                .take(12)
+                .joinToString()
+            author = row("Студия")
+            status = SAnime.UNKNOWN
+            description = buildString {
+                document.selectFirst("meta[property=og:description]")?.attr("content")?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let {
+                        appendLine(it)
+                        appendLine()
+                    }
+                document.select(".pmovie__original-title")
+                    .map { it.text().trim() }
+                    .filter { it.isNotBlank() }
+                    .takeIf { it.isNotEmpty() }
+                    ?.let { appendLine("Другие названия: ${it.joinToString(" / ")}") }
+                listOf("Год", "Эпизоды", "Студия", "Жанр", "Озвучка", "Страна", "Статус")
+                    .forEach { label -> row(label)?.let { appendLine("$label: $it") } }
+            }.trim()
         }
     }
 
     // ============================== Episodes ==============================
-    // Fetched via getEpisodeList below (suspend network calls can't live in episodeListParse).
-    override fun episodeListParse(response: Response): List<SEpisode> = throw UnsupportedOperationException()
-    override fun seasonListParse(response: Response): List<SAnime> = throw UnsupportedOperationException()
-    override fun hosterListParse(response: Response): List<Hoster> = throw UnsupportedOperationException()
 
-    override suspend fun getEpisodeList(anime: SAnime): List<SEpisode> {
-        val document = client.get(baseUrl + anime.url, headers).use { it.asJsoup() }
+    override fun episodeListRequest(anime: SAnime): Request = GET(baseUrl + anime.url, headers)
 
-        val playerUrl = fetchKodikPlayerUrl(document, anime.url)
+    override fun episodeListParse(response: Response): List<SEpisode> = runBlocking {
+        val document = response.useAsJsoup()
 
-        // Movies and single videos: anything that is not a serial.
-        if (!playerUrl.contains("/serial/")) {
-            return listOf(
+        val hub = document.selectFirst("video-player[data-title-id]")?.let {
+            HubParams(
+                titleId = it.attr("data-title-id"),
+                publisherId = it.attr("data-publisher-id").ifBlank { "1" },
+                aggregator = it.attr("data-aggregator").ifBlank { "mali" },
+            )
+        }
+
+        val playlist = hub?.let {
+            runCatching {
+                client.newCall(playlistRequest(it)).awaitSuccess().parseAs<PlaylistDto>()
+            }.getOrNull()
+        }
+
+        // One episode appears once per voice-over; group them so each episode is a single row.
+        val grouped = playlist?.items
+            .orEmpty()
+            .filter { !it.vkId.isNullOrBlank() }
+            .groupBy { (it.season ?: 1) to (it.episode ?: 1f) }
+
+        if (hub != null && grouped.isNotEmpty()) {
+            val isSingle = grouped.size == 1
+
+            return@runBlocking grouped.entries
+                .sortedWith(
+                    compareByDescending<Map.Entry<Pair<Int, Float>, List<PlaylistItemDto>>> { it.key.first }
+                        .thenByDescending { it.key.second },
+                )
+                .map { (key, items) ->
+                    val season = key.first
+                    val number = key.second
+                    val voices = items.map { it.voiceLabel }.distinct()
+                    val itemName = items.first().name
+                        ?.takeIf { it.isNotBlank() && it != playlist?.titleName }
+
+                    SEpisode.create().apply {
+                        url = "hub|${hub.titleId}|${hub.publisherId}|${hub.aggregator}|$season|${number.formatNumber()}"
+                        episode_number = number
+                        name = when {
+                            isSingle -> "Фильм"
+                            itemName != null -> itemName
+                            else -> "Эпизод ${number.formatNumber()}"
+                        }
+                        scanlator = voices.take(4).joinToString().takeIf { it.isNotBlank() }
+                    }
+                }
+        }
+
+        // The CDN player answers with an empty body for some releases; those pages still
+        // embed a Kodik iframe, so fall back to it instead of showing an empty episode list.
+        val kodikUrl = document.kodikIframeUrl()
+            ?: throw Exception("Плеер не найден на странице тайтла")
+
+        val player = client.newCall(GET(kodikUrl, headers)).awaitSuccess().bodyString()
+        val options = Jsoup.parse(player).select(".serial-series-box option")
+
+        if (options.isEmpty()) {
+            return@runBlocking listOf(
                 SEpisode.create().apply {
+                    url = "kodik|$kodikUrl|"
+                    episode_number = 1f
                     name = "Фильм"
-                    episode_number = 1F
-                    url = playerUrl
                 },
             )
         }
 
-        // Serials: take the maximum episode count across the series list and all
-        // translations ("Name (N эп.)").
-        val playerDoc = fetchKodikDocument(playerUrl)
+        options.mapNotNull { option ->
+            val value = option.attr("value").takeIf { it.isNotBlank() } ?: return@mapNotNull null
 
-        val fromSeriesBox = playerDoc.select("div.serial-series-box option")
-            .mapNotNull { it.attr("value").toIntOrNull() }
-            .maxOrNull() ?: 0
-        val fromTranslations = playerDoc.select("div.serial-translations-box option")
-            .mapNotNull { EP_COUNT_REGEX.find(it.text())?.groupValues?.get(1)?.toIntOrNull() }
-            .maxOrNull() ?: 0
-
-        val total = maxOf(fromSeriesBox, fromTranslations)
-        if (total == 0) throw Exception("Не удалось получить список серий")
-
-        val separator = if (playerUrl.contains("?")) "&" else "?"
-
-        return (total downTo 1).map { ep ->
             SEpisode.create().apply {
-                name = "Серия $ep"
-                episode_number = ep.toFloat()
-                url = "$playerUrl${separator}episode=$ep"
+                url = "kodik|$kodikUrl|$value"
+                episode_number = value.toFloatOrNull() ?: 1f
+                name = option.attr("data-title").trim().ifBlank { "Серия $value" }
             }
-        }
+        }.sortedByDescending { it.episode_number }
     }
 
-    // The player is no longer embedded in the page markup: the placeholder only carries
-    // the anime id and one slot per player ("Плеер Alloha", "Плеер Kodik"). The actual
-    // embed URL is returned by the DLE ajax controller (see theme/js/player-relay.js):
-    //     /engine/ajax/controller.php?mod=player&id=<animeId>&slot=<slot>
-    //     -> {"status":true,"data":{"name":"Kodik","kind":"iframe","src":"...","label":"..."}}
-    private suspend fun fetchKodikPlayerUrl(document: Document, animeUrl: String): String {
-        val player = document.selectFirst(".tabs-block[data-player-anime-id]")
-            ?: throw Exception("Плеер Kodik не найден на странице")
+    private fun Document.kodikIframeUrl(): String? = select("iframe[src*=kodikplayer]")
+        .map { it.attr("src") }
+        .firstOrNull { it.isNotBlank() }
+        ?.toAbsoluteUrl()
 
-        val animeId = player.attr("data-player-anime-id")
-        val slot = player.select("[data-player-slot]")
-            .firstOrNull { it.attr("data-player-title").contains("Kodik", ignoreCase = true) }
-            ?.attr("data-player-slot")
-            ?: throw Exception("Плеер Kodik не найден на странице")
+    // ============================ Video Links =============================
 
-        val ajaxHeaders = headers.newBuilder()
-            .set("Referer", "$baseUrl$animeUrl")
-            .set("X-Requested-With", "XMLHttpRequest")
-            .build()
+    override suspend fun getVideoList(episode: SEpisode): List<Video> {
+        val parts = episode.url.split('|')
 
-        val playerResponse = client.get(
-            "$baseUrl/engine/ajax/controller.php?mod=player&id=$animeId&slot=$slot",
-            ajaxHeaders,
-        ).parseAs<PlayerResponse>()
-
-        val playerUrl = playerResponse.data?.src
-        if (!playerResponse.status || playerUrl.isNullOrBlank()) {
-            throw Exception("Kodik плеер недоступен для этого тайтла")
+        val videos = when (parts.firstOrNull()) {
+            "hub" -> hubVideos(parts)
+            "kodik" -> kodikVideos(parts)
+            else -> emptyList()
         }
 
-        return playerUrl.fixProtocol()
-    }
-
-    // =============================== Videos ===============================
-
-    // One Hoster per translation/dubbing so that switching the audio track in the player
-    // actually switches the stream: the app switches hosters, while the videos inside a
-    // hoster are just the qualities of that one dubbing.
-    override suspend fun getHosterList(episode: SEpisode): List<Hoster> {
-        val requestUrl = episode.url.toHttpUrl()
-        val episodeNum = requestUrl.queryParameter("episode")?.toIntOrNull()
-        val isSerial = requestUrl.encodedPath.startsWith("/serial/")
-        val playerHost = requestUrl.host
-        val document = fetchKodikDocument(episode.url)
-
-        val translations = document.select(
-            "div.serial-translations-box option, div.movie-translations-box option",
-        )
-
-        // Single translation — the episode URL itself is the player page.
-        if (translations.isEmpty()) {
-            return listOf(Hoster(hosterName = "Kodik", internalData = episode.url))
+        if (videos.isEmpty()) {
+            throw Exception("Не удалось получить ссылки на видео для этой серии")
         }
 
-        // Carry the signed urlParams over so Kodik actually serves the requested dubbing:
-        // without them the media id/hash in the path are ignored and the first dubbing wins.
-        val pageHtml = document.html()
-        val rawParams = extractUrlParams(pageHtml) ?: return emptyList()
-        val signQuery = urlParamsToQuery(rawParams)
-
-        return translations.mapNotNull { option ->
-            val mediaId = option.attr("data-media-id")
-            val mediaHash = option.attr("data-media-hash")
-            if (mediaId.isBlank() || mediaHash.isBlank()) return@mapNotNull null
-
-            // Skip translations that do not have the requested episode yet.
-            val epCount = EP_COUNT_REGEX.find(option.text())?.groupValues?.get(1)?.toIntOrNull()
-            if (episodeNum != null && epCount != null && epCount < episodeNum) return@mapNotNull null
-
-            val dubbing = option.text().substringBefore(" (").trim().ifBlank { "Kodik" }
-            val label = if (option.attr("data-translation-type") == "subtitles") {
-                "$dubbing (Субтитры)"
-            } else {
-                dubbing
-            }
-
-            val mediaType = if (isSerial) "serial" else "video"
-            val params = listOfNotNull(
-                signQuery.takeIf { it.isNotEmpty() },
-                if (isSerial && episodeNum != null) "episode=$episodeNum" else null,
-            ).joinToString("&")
-            val url = buildString {
-                append("https://$playerHost/$mediaType/$mediaId/$mediaHash/720p")
-                if (params.isNotEmpty()) append("?$params")
-            }
-
-            Hoster(hosterName = label, internalData = url)
-        }
-    }
-
-    private fun urlParamsToQuery(raw: String): String = runCatching {
-        raw.parseAs<JsonObject>().entries.joinToString("&") { (key, value) ->
-            "$key=${value.jsonPrimitive.content}"
-        }
-    }.getOrDefault("")
-
-    override suspend fun getVideoList(hoster: Hoster): List<Video> = applyQualityPreference(kodikVideoLinks(hoster.internalData, hoster.hosterName))
-
-    // Voice-overs before subtitles now applies to the hoster (audio track) list.
-    override fun List<Hoster>.sortHosters(): List<Hoster> = sortedBy { it.hosterName.contains("Субтитры", ignoreCase = true) }
-
-    // Put the quality selected in the settings first, but keep the other qualities available:
-    // Kodik's catalogue differs per translation, and dropping everything that is not the
-    // preferred quality would silently remove a whole dubbing/subtitle track — a translation
-    // that simply has no 1080p rendition would not be playable at all. Videos whose quality
-    // cannot be parsed go last, and ties prefer the higher quality.
-    private fun applyQualityPreference(videos: List<Video>): List<Video> {
-        val pref = preferences.getString(PREF_QUALITY_KEY, PREF_QUALITY_DEFAULT)!!.toIntOrNull()
-            ?: return videos
         return videos.sortedWith(
-            compareBy(
-                { it.videoTitle.parseQuality()?.let { q -> kotlin.math.abs(q - pref) } ?: Int.MAX_VALUE },
-                { -(it.videoTitle.parseQuality() ?: 0) },
-            ),
+            compareByDescending<Video> { it.videoTitle.parseQuality() == preferredQuality }
+                .thenByDescending { it.videoTitle.parseQuality() },
         )
     }
 
-    private fun String.parseQuality(): Int? = QUALITY_REGEX.find(this)?.groupValues?.get(1)?.toIntOrNull()
+    private suspend fun hubVideos(parts: List<String>): List<Video> {
+        if (parts.size < 6) return emptyList()
 
-    // Voice-overs before subtitles.
-    override fun List<Video>.sortVideos(): List<Video> = sortedBy {
-        it.videoTitle.contains("Субтитры", ignoreCase = true)
-    }
+        val hub = HubParams(parts[1], parts[2], parts[3])
+        val season = parts[4]
+        val number = parts[5]
 
-    // ─── Kodik player ─────────────────────────────────────────────────────
+        val playlist = client.newCall(playlistRequest(hub)).awaitSuccess().parseAs<PlaylistDto>()
 
-    // Base headers (incl. the default browser-like User-Agent) with the site referer.
-    private val kodikHeaders: Headers by lazy {
-        headers.newBuilder()
-            .set("Referer", "$baseUrl/")
-            .build()
-    }
-
-    private val decodeScriptCache = java.util.concurrent.ConcurrentHashMap<String, String>()
-
-    // Kodik pages contain a self-closing <script .../> inside an inline <svg>. Browsers
-    // parse it as an empty element (SVG foreign-content rules), but Jsoup treats it as an
-    // opening <script> tag and swallows the rest of the page — including the translations
-    // panel — as raw script text. Balance such tags before parsing.
-    private suspend fun fetchKodikDocument(url: String): Document {
-        val body = client.get(url, kodikHeaders).bodyString()
-        return Jsoup.parse(body.replace(SELF_CLOSING_SCRIPT_REGEX, "<script$1></script>"), url)
-    }
-
-    private suspend fun isUrlAvailable(url: String, headers: Headers): Boolean = runCatching {
-        client.get(url, headers).use { it.isSuccessful }
-    }.getOrDefault(false)
-
-    private suspend fun kodikVideoLinks(playerPageUrl: String, dubbing: String): List<Video> {
-        val page = runCatching {
-            fetchKodikDocument(playerPageUrl)
-        }.getOrNull() ?: return emptyList()
-
-        val pageHtml = page.html()
-
-        // urlParams is a JSON blob wrapped in quotes.
-        val rawParams = extractUrlParams(pageHtml) ?: return emptyList()
-
-        val formData = runCatching {
-            rawParams.parseAs<KodikFormData>()
-        }.getOrNull() ?: return emptyList()
-
-        if (formData.dSign.isEmpty()) return emptyList()
-
-        // Per-episode type/id/hash come from the vInfo object:
-        //     vInfo.type = 'seria';  vInfo.hash = '...';  vInfo.id = '1407443';
-        var videoType: String? = null
-        var videoId: String? = null
-        var videoHash: String? = null
-        for (script in page.select("script").map { it.data() }) {
-            val t = VIDEO_TYPE_REGEX.find(script)?.groupValues?.get(1) ?: continue
-            val h = VIDEO_HASH_REGEX.find(script)?.groupValues?.get(1) ?: continue
-            val i = VIDEO_ID_REGEX.find(script)?.groupValues?.get(1) ?: continue
-            videoType = t
-            videoHash = h
-            videoId = i
-            break
+        val targets = playlist.items.filter {
+            !it.vkId.isNullOrBlank() &&
+                (it.season ?: 1).toString() == season &&
+                (it.episode ?: 1f).formatNumber() == number
         }
 
-        // Fallback to the player URL path: https://{host}/{type}/{id}/{hash}/720p
-        val urlParts = playerPageUrl.substringAfter("://").substringBefore('?').split('/')
-        val resolvedType = videoType ?: urlParts.getOrNull(1)
-        val resolvedId = videoId ?: urlParts.getOrNull(2)
-        val resolvedHash = videoHash ?: urlParts.getOrNull(3)
-        if (resolvedType == null || resolvedId == null || resolvedHash == null) return emptyList()
+        if (targets.isEmpty()) return emptyList()
 
-        val playerHost = playerPageUrl.substringAfter("://").substringBefore('/')
+        val ignoreDuplicates = preferences.getBoolean(PREF_ONE_PER_VOICE_KEY, PREF_ONE_PER_VOICE_DEFAULT)
+        val chosen = if (ignoreDuplicates) targets.distinctBy { it.voiceLabel } else targets
 
-        val postBody = FormBody.Builder()
-            .add("d", formData.d)
-            .add("d_sign", Uri.decode(formData.dSign))
-            .add("pd", formData.pd)
-            .add("pd_sign", Uri.decode(formData.pdSign))
-            .add("ref", Uri.decode(formData.ref))
-            .add("ref_sign", Uri.decode(formData.refSign))
-            .add("type", resolvedType)
-            .add("id", resolvedId)
-            .add("hash", resolvedHash)
-            .add("bad_user", "true")
-            .add("cdn_is_working", "true")
-            .build()
+        return chosen.parallelCatchingFlatMap { item -> itemVideos(item) }
+    }
 
-        val postHeaders = headers.newBuilder()
-            .set("Referer", playerPageUrl)
-            .set("Origin", "https://$playerHost")
-            .build()
+    private suspend fun itemVideos(item: PlaylistItemDto): List<Video> {
+        val vkId = item.vkId ?: return emptyList()
 
-        val kodikData = runCatching {
-            client.newCall(
-                Request.Builder()
-                    .url("https://$playerHost/ftor")
-                    .post(postBody)
-                    .headers(postHeaders)
-                    .build(),
-            ).execute().parseAs<KodikData>()
-        }.getOrNull() ?: return emptyList()
+        val video = client.newCall(GET("$API_URL/player/sv/video/$vkId", apiHeaders()))
+            .awaitSuccess()
+            .parseAs<VideoDto>()
 
-        // Decode each quality with the page's own JS function via QuickJs.
-        val scriptUrl = (
-            page.selectFirst("script[src*=app.serial]")
-                ?: page.selectFirst("script[src*=app.video]")
-                ?: page.selectFirst("script[src*=player]")
-                ?: page.selectFirst("script[src*=app]")
-            )?.attr("abs:src") ?: return emptyList()
+        val hlsUrl = video.sources?.hlsUrl?.takeIf { it.isNotBlank() } ?: return emptyList()
+        val label = item.voiceLabel
 
-        val jsScript = decodeScriptCache.getOrPut(scriptUrl) {
-            runCatching {
-                client.get(scriptUrl, kodikHeaders).bodyString()
-            }.getOrNull() ?: return emptyList()
+        return playlistUtils.extractFromHls(
+            playlistUrl = hlsUrl,
+            referer = "$baseUrl/",
+            videoNameGen = { "$label - $it" },
+        ).ifEmpty {
+            listOf(Video(hlsUrl, label, hlsUrl, headers = apiHeaders()))
         }
+    }
 
-        val atobMatch = ATOB_REGEX.find(jsScript) ?: return emptyList()
+    // ---------------------------- Kodik fallback ----------------------------
 
-        var encodeScript = "("
-        val deque = ArrayDeque<Char>()
-        deque.addFirst('(')
-        for (i in atobMatch.range.last until jsScript.length) {
-            val char = jsScript[i]
-            when (char) {
-                '(', '{' -> deque.addFirst(char)
-                ')', '}' -> if (deque.isNotEmpty()) deque.removeFirst()
+    private suspend fun kodikVideos(parts: List<String>): List<Video> {
+        if (parts.size < 3) return emptyList()
+
+        val iframeUrl = parts[1]
+        val episodeValue = parts[2]
+
+        val ignoreSubs = preferences.getBoolean(PREF_IGNORE_SUBS_KEY, PREF_IGNORE_SUBS_DEFAULT)
+        val player = client.newCall(GET(iframeUrl, headers)).awaitSuccess().bodyString()
+
+        // Every voice-over is a separate Kodik "media" with its own id, hash and episodes.
+        val translations = Jsoup.parse(player)
+            .select(".serial-translations-box option")
+            .mapNotNull { option ->
+                val mediaId = option.attr("data-media-id").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                val mediaHash = option.attr("data-media-hash").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                val mediaType = option.attr("data-media-type").ifBlank { "serial" }
+
+                Translation(
+                    title = option.attr("data-title").trim().ifBlank { "Kodik" },
+                    isSubtitles = option.attr("data-translation-type") == "subtitles",
+                    url = "https://kodikplayer.com/$mediaType/$mediaId/$mediaHash/720p",
+                )
             }
-            encodeScript += char
-            if (deque.isEmpty()) break
+            .filterNot { ignoreSubs && it.isSubtitles }
+            .ifEmpty { listOf(Translation("Kodik", false, iframeUrl)) }
+
+        return translations.parallelCatchingFlatMap { translation ->
+            translationVideos(translation, episodeValue)
+        }
+    }
+
+    private class Translation(val title: String, val isSubtitles: Boolean, val url: String)
+
+    private suspend fun translationVideos(translation: Translation, episodeValue: String): List<Video> {
+        val targetUrl = if (episodeValue.isBlank()) {
+            translation.url
+        } else {
+            val page = client.newCall(GET(translation.url, headers)).awaitSuccess().bodyString()
+            val option = Jsoup.parse(page)
+                .select(".serial-series-box option")
+                .firstOrNull { it.attr("value") == episodeValue }
+                ?: return emptyList()
+
+            val id = option.attr("data-id").takeIf { it.isNotBlank() } ?: return emptyList()
+            val hash = option.attr("data-hash").takeIf { it.isNotBlank() } ?: return emptyList()
+            "https://kodikplayer.com/seria/$id/$hash/720p"
         }
 
-        val hlsHeaders = headers.newBuilder()
-            .set("Referer", "https://$playerHost/")
-            .set("Origin", "https://$playerHost")
+        val label = buildString {
+            append(translation.title)
+            if (translation.isSubtitles) append(" (субтитры)")
+        }
+
+        return kodikPlayerVideos(targetUrl, label)
+    }
+
+    private suspend fun kodikPlayerVideos(playerUrl: String, label: String): List<Video> {
+        val page = client.newCall(GET(playerUrl, headers)).awaitSuccess().bodyString()
+
+        val params = URL_PARAMS_REGEX.find(page)?.groupValues?.get(1)?.parseAs<KodikUrlParams>()
+            ?: return emptyList()
+        if (params.d_sign.isEmpty() || params.pd.isEmpty()) return emptyList()
+
+        val segments = playerUrl.toHttpUrl().pathSegments
+        if (segments.size < 3) return emptyList()
+
+        val formBody = FormBody.Builder()
+            .add("d", params.d)
+            .add("d_sign", Uri.decode(params.d_sign))
+            .add("pd", params.pd)
+            .add("pd_sign", Uri.decode(params.pd_sign))
+            .add("ref", Uri.decode(params.ref))
+            .add("ref_sign", Uri.decode(params.ref_sign))
+            .add("type", segments[0])
+            .add("id", segments[1])
+            .add("hash", segments[2])
             .build()
 
-        val qualityMap = mapOf(
-            "360" to kodikData.links.ugly,
-            "480" to kodikData.links.bad,
-            "720" to kodikData.links.good,
-            "1080" to kodikData.links.full,
-        )
+        val ftorHeaders = Headers.Builder()
+            .set("Referer", "$baseUrl/")
+            .set("Origin", "https://${params.pd}")
+            .set("User-Agent", "Mozilla/5.0 (Android)")
+            .build()
 
-        return QuickJs.create().use { qjs ->
-            qualityMap.flatMap { (qualityName, links) ->
-                val encodedSrc = links.firstOrNull()?.src ?: return@flatMap emptyList()
-                val base64Url = runCatching {
-                    qjs.evaluate("t='$encodedSrc'; $encodeScript").toString()
-                }.getOrNull() ?: return@flatMap emptyList()
+        val ftor = client.newCall(POST("https://${params.pd}/ftor", ftorHeaders, formBody))
+            .awaitSuccess()
+            .parseAs<KodikFtorResponse>()
 
-                val hlsUrl = runCatching {
-                    Base64.decode(base64Url, Base64.DEFAULT).toString(Charsets.UTF_8)
-                }.getOrNull()?.fixProtocol() ?: return@flatMap emptyList()
+        return ftor.links.entries
+            .sortedByDescending { it.key.toIntOrNull() ?: 0 }
+            .flatMap { (quality, links) ->
+                val encoded = links.firstOrNull()?.src ?: return@flatMap emptyList()
+                val playlistUrl = decodeKodikSource(encoded) ?: return@flatMap emptyList()
 
-                if (hlsUrl.contains(".mpd")) {
-                    PlaylistUtils(client, headers).extractFromDash(
-                        hlsUrl,
-                        { res: String -> "$dubbing (${qualityName}p Kodik - $res)" },
-                        hlsHeaders,
-                        hlsHeaders,
-                    )
-                } else {
-                    buildList {
-                        // Kodik's API reports at most 720p, but the CDN usually stores a
-                        // 1080p rendition at the same path — probe for it.
-                        if (qualityName == "720" && kodikData.links.full.isEmpty()) {
-                            val hlsUrl1080 = hlsUrl.replace("/720.mp4", "/1080.mp4")
-                            if (hlsUrl1080 != hlsUrl && isUrlAvailable(hlsUrl1080, hlsHeaders)) {
-                                add(Video(hlsUrl1080, "$dubbing (1080p Kodik)", hlsUrl1080, headers = hlsHeaders))
-                            }
-                        }
-                        add(Video(hlsUrl, "$dubbing (${qualityName}p Kodik)", hlsUrl, headers = hlsHeaders))
-                    }
+                playlistUtils.extractFromHls(
+                    playlistUrl = playlistUrl,
+                    referer = "https://${params.pd}/",
+                    videoNameGen = { "$label - $it" },
+                ).ifEmpty {
+                    listOf(Video(playlistUrl, "$label - ${quality}p", playlistUrl))
                 }
             }
+    }
+
+    /**
+     * Kodik obfuscates the playlist url with a rotating alphabet shift applied before
+     * base64 encoding. The shift changes over time, so every variant is tried and the
+     * one that decodes into a valid url wins — no JS engine needed.
+     */
+    private fun decodeKodikSource(encoded: String): String? {
+        for (shift in 1..25) {
+            val decoded = runCatching {
+                String(Base64.decode(encoded.rotate(shift).padBase64(), Base64.DEFAULT), Charsets.UTF_8)
+            }.getOrNull() ?: continue
+
+            if (decoded.startsWith("http") || decoded.startsWith("//")) {
+                return decoded.toAbsoluteUrl()
+            }
+        }
+        return null
+    }
+
+    private fun String.rotate(shift: Int): String = map { char ->
+        when {
+            char in 'a'..'z' -> 'a' + (char - 'a' + shift) % 26
+            char in 'A'..'Z' -> 'A' + (char - 'A' + shift) % 26
+            else -> char
+        }
+    }.joinToString("")
+
+    private fun String.padBase64(): String {
+        val remainder = length % 4
+        return if (remainder == 0) this else this + "=".repeat(4 - remainder)
+    }
+
+    private fun String.toAbsoluteUrl(): String = when {
+        startsWith("//") -> "https:$this"
+        startsWith("http") -> this
+        startsWith("/") -> baseUrl + this
+        else -> "https://$this"
+    }
+
+    // ============================== Settings ==============================
+
+    override fun setupPreferenceScreen(screen: PreferenceScreen) {
+        screen.addListPreference(
+            key = PREF_QUALITY_KEY,
+            default = PREF_QUALITY_DEFAULT,
+            title = "Предпочитаемое качество",
+            summary = "%s",
+            entries = PREF_QUALITY_ENTRIES,
+            entryValues = PREF_QUALITY_ENTRIES,
+        )
+
+        screen.addSwitchPreference(
+            key = PREF_ONE_PER_VOICE_KEY,
+            default = PREF_ONE_PER_VOICE_DEFAULT,
+            title = "Убирать дубликаты озвучек",
+            summary = "Оставлять по одной записи на студию — сайт часто отдаёт повторы",
+        )
+
+        screen.addSwitchPreference(
+            key = PREF_IGNORE_SUBS_KEY,
+            default = PREF_IGNORE_SUBS_DEFAULT,
+            title = "Скрывать переводы субтитрами",
+            summary = "Действует для резервного плеера Kodik",
+        )
+    }
+
+    private val preferredQuality: Int
+        get() = preferences.getString(PREF_QUALITY_KEY, PREF_QUALITY_DEFAULT)!!
+            .filter { it.isDigit() }
+            .toIntOrNull()
+            ?: 1080
+
+    // =============================== Utils ================================
+
+    private class HubParams(val titleId: String, val publisherId: String, val aggregator: String)
+
+    private fun playlistRequest(hub: HubParams): Request {
+        val url = "$API_URL/player/sv/playlist".toHttpUrl().newBuilder()
+            .addQueryParameter("pub", hub.publisherId)
+            .addQueryParameter("id", hub.titleId)
+            .addQueryParameter("aggr", hub.aggregator)
+            .build()
+
+        return GET(url, apiHeaders())
+    }
+
+    private fun apiHeaders(): Headers = Headers.Builder()
+        .set("Referer", "$baseUrl/")
+        .set("Origin", baseUrl)
+        .set("Accept", "application/json")
+        .set(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+                "Chrome/124.0.0.0 Safari/537.36",
+        )
+        .build()
+
+    private fun listRequest(path: String, page: Int): Request {
+        val cleanPath = path.ifBlank { "/vyshlo/" }.removeSuffix("/")
+        val url = if (page > 1) "$baseUrl$cleanPath/page/$page/" else "$baseUrl$cleanPath/"
+
+        return GET(url, headers)
+    }
+
+    private fun listParse(response: Response): AnimesPage {
+        val document = response.useAsJsoup()
+
+        // Only the main column is the catalog: the sidebar ("popular", "top") and the
+        // related carousel reuse the same card markup and used to leak in as duplicates.
+        val animes = document.select("main.col-main a.poster")
+            .mapNotNull { it.toSAnime() }
+            .distinctBy { it.url }
+
+        val current = PAGE_REGEX.find(response.request.url.encodedPath)
+            ?.groupValues?.get(1)?.toIntOrNull()
+            ?: 1
+
+        return AnimesPage(animes, document.hasPageAfter(current))
+    }
+
+    // DLE renders the pager as plain page links; a next page exists only when one of
+    // them points past the page we are on.
+    private fun Document.hasPageAfter(current: Int): Boolean = select("#pagination a[href], .pagination a[href]").any { link ->
+        val page = PAGE_REGEX.find(link.attr("href"))?.groupValues?.get(1)?.toIntOrNull()
+        page != null && page > current
+    }
+
+    private fun Element.toSAnime(): SAnime? {
+        val href = attr("href").takeIf { it.isNotBlank() } ?: return null
+        val path = runCatching { href.toHttpUrl().encodedPath }.getOrDefault(href)
+
+        return SAnime.create().apply {
+            url = path
+            title = attr("title").ifBlank { selectFirst(".poster__title, .popular__title, .top__title")?.text().orEmpty() }.trim()
+            thumbnail_url = selectFirst("img")?.absUrl("src")?.takeIf { it.isNotBlank() }
         }
     }
 
-    // ============================= Preferences ============================
+    private fun Float.formatNumber(): String = if (this % 1f == 0f) toInt().toString() else toString()
 
-    override fun setupPreferenceScreen(screen: PreferenceScreen) {
-        ListPreference(screen.context).apply {
-            key = PREF_QUALITY_KEY
-            title = "Предпочитаемое качество"
-            entries = arrayOf("1080p", "720p", "480p", "360p")
-            entryValues = arrayOf("1080", "720", "480", "360")
-            setDefaultValue(PREF_QUALITY_DEFAULT)
-            summary = "%s"
-        }.also(screen::addPreference)
-    }
-
-    // ============================= Utilities ==============================
-
-    private fun String.fixProtocol(): String = if (startsWith("//")) "https:$this" else this
-
-    // urlParams is a JSON blob assigned to a JS variable, quoted with either quote style.
-    private fun extractUrlParams(pageHtml: String): String? = URL_PARAMS_SINGLE_QUOTED_REGEX.find(pageHtml)?.groupValues?.get(1)
-        ?: URL_PARAMS_DOUBLE_QUOTED_REGEX.find(pageHtml)?.groupValues?.get(1)
+    private fun String.parseQuality(): Int = QUALITY_REGEX.find(this)?.groupValues?.get(1)?.toIntOrNull() ?: 0
 
     companion object {
-        private const val PREF_QUALITY_KEY = "pref_quality"
-        private const val PREF_QUALITY_DEFAULT = "1080"
+        private const val API_URL = "https://plapi.cdnvideohub.com/api/v1"
+        private const val SEARCH_PAGE_SIZE = 12
 
-        private val EP_COUNT_REGEX = Regex("""\((\d+)\s*эп""")
-        private val STATUS_REGEX = Regex("""Статус:\s*([А-Яа-яёЁ]+)""")
-        private val QUALITY_REGEX = Regex("""(\d{3,4})\s*p""")
-        private val ATOB_REGEX = Regex("atob\\([^\"]")
-        private val SELF_CLOSING_SCRIPT_REGEX = Regex("""<script([^>]*)/>""")
-        private val URL_PARAMS_SINGLE_QUOTED_REGEX = Regex("""urlParams\s*=\s*'([^']+)'""")
-        private val URL_PARAMS_DOUBLE_QUOTED_REGEX = Regex("""urlParams\s*=\s*"([^"]+)"""")
-        private val VIDEO_TYPE_REGEX = Regex("""\.type\s*=\s*['"]([^'"]+)['"]""")
-        private val VIDEO_HASH_REGEX = Regex("""\.hash\s*=\s*['"]([^'"]+)['"]""")
-        private val VIDEO_ID_REGEX = Regex("""\.id\s*=\s*['"]?([A-Za-z0-9]+)['"]?""")
+        private const val PREF_QUALITY_KEY = "pref_quality"
+        private const val PREF_QUALITY_DEFAULT = "1080p"
+        private val PREF_QUALITY_ENTRIES = listOf("1080p", "720p", "480p", "360p")
+
+        private const val PREF_ONE_PER_VOICE_KEY = "pref_one_per_voice"
+        private const val PREF_ONE_PER_VOICE_DEFAULT = true
+
+        private const val PREF_IGNORE_SUBS_KEY = "pref_ignore_subs"
+        private const val PREF_IGNORE_SUBS_DEFAULT = false
+
+        private val URL_PARAMS_REGEX = Regex("""urlParams\s*=\s*'(.*?)'""")
+
+        private val QUALITY_REGEX = Regex("""(\d+)p""")
+        private val PAGE_REGEX = Regex("""/page/(\d+)""")
     }
 }
