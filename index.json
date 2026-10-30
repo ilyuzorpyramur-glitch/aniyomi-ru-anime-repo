@@ -18,6 +18,24 @@
     ]
   },
   {
+    "name": "Aniyomi: AniJoy",
+    "pkg": "eu.kanade.tachiyomi.animeextension.ru.anijoy",
+    "apk": "aniyomi-ru.anijoy-v14.1.apk",
+    "lang": "ru",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "AniJoy",
+        "lang": "ru",
+        "id": "1459004988282554043",
+        "baseUrl": "https://anijoy.ru",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: AniLibria",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.anilibria",
     "apk": "aniyomi-ru.anilibria-v14.5.apk",
