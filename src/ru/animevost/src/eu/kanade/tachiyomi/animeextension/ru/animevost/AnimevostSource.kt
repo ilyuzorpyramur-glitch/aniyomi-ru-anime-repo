@@ -36,8 +36,7 @@ data class AnimeDescription(
 class AnimevostSource(
     override val name: String,
     override val baseUrl: String,
-) :
-    ParsedAnimeHttpLegacySource(),
+): ParsedAnimeHttpLegacySource(),
     ConfigurableAnimeSource {
     private enum class SortBy(val by: String) {
         RATING("rating"),
