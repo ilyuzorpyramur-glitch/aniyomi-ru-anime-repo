@@ -79,6 +79,9 @@ class Rezka :
 
     override val client: OkHttpClient = network.client.newBuilder()
         .addInterceptor { chain ->
+            // Первый же запрос авторизует сессию: без cookie сайт отвечает 301
+            // на зеркало с формой входа вместо каталога.
+            if (anubisCookie == null) anubisCookie = authorizeOnce
             val original = chain.request()
             val known = anubisCookie
             val request = if (known != null && original.header("Cookie") == null) {
@@ -96,6 +99,17 @@ class Rezka :
             chain.proceed(request.newBuilder().header("Cookie", cookie).build())
         }
         .build()
+
+    private val authorizeOnce: String? by lazy { authorize() }
+
+    private fun authorize(): String? = runCatching {
+        val plain = network.client.newBuilder().build()
+        plain.newCall(GET("$baseUrl/", headers)).execute().use { response ->
+            val html = response.peekText()
+            if (!html.contains("anubis_challenge")) return@runCatching null
+            solveAnubisHtml(html)
+        }
+    }.getOrNull()
 
     // Приложение запрашивает gzip самостоятельно, поэтому OkHttp не распаковывает
     // ответ: байты приходят сжатыми и строковый поиск по ним не работает.
@@ -119,7 +133,10 @@ class Rezka :
     }.getOrDefault(false)
 
     private fun solveAnubis(response: Response): String? = runCatching {
-        val html = response.peekText()
+        solveAnubisHtml(response.peekText())
+    }.getOrNull()
+
+    private fun solveAnubisHtml(html: String): String? = runCatching {
         val raw = CHALLENGE_REGEX.find(html)?.groupValues?.get(1) ?: return@runCatching null
         val challenge = JSONObject(raw)
         val payload = challenge.getJSONObject("challenge")
@@ -162,7 +179,6 @@ class Rezka :
         }
     }.getOrNull()
 
-    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
     // get_cdn_series either answers within a second or hangs; cap it so a hang falls
     // through to the error path instead of holding the player for the app's 2-minute limit.
