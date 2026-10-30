@@ -148,12 +148,18 @@ class JutSuNet :
     override fun episodeListParse(response: Response): List<SEpisode> = runBlocking {
         val document = response.useAsJsoup()
 
-        val newsId = document.select(".xfplayer[data-params]")
-            .map { it.attr("data-params") }
-            .firstNotNullOfOrNull { ID_REGEX.find(it)?.groupValues?.get(1) }
+        // Сайт перешёл на relay-плеер: id тайтла лежит в data-player-anime-id,
+        // а ссылку на iframe Kodik отдаёт JSON-эндпоинт controller.php.
+        val animeId = document.selectFirst("[data-player-anime-id]")
+            ?.attr("data-player-anime-id")
+            ?.takeIf { it.isNotBlank() }
+            ?: document.select(".xfplayer[data-params]")
+                .map { it.attr("data-params") }
+                .firstNotNullOfOrNull { ID_REGEX.find(it)?.groupValues?.get(1) }
             ?: throw Exception("Плеер не найден на странице тайтла")
 
-        val iframeUrl = kodikIframeUrl(newsId)
+        val iframeUrl = playerIframeUrl(animeId)
+            ?: kodikIframeUrl(animeId)
             ?: throw Exception("Не удалось открыть плеер Kodik")
 
         val player = client.newCall(GET(iframeUrl, headers)).awaitSuccess().bodyString()
@@ -163,7 +169,7 @@ class JutSuNet :
             // Movie / single-part release: the iframe itself is the only video.
             return@runBlocking listOf(
                 SEpisode.create().apply {
-                    url = "$newsId|"
+                    url = "$iframeUrl|"
                     episode_number = 1f
                     name = "Фильм"
                 },
@@ -174,7 +180,7 @@ class JutSuNet :
             .sortedByDescending { it.number }
             .map { option ->
                 SEpisode.create().apply {
-                    url = "$newsId|${option.value}"
+                    url = "$iframeUrl|${option.value}"
                     episode_number = option.number
                     name = option.title.ifBlank { "Серия ${option.value}" }
                 }
@@ -195,10 +201,14 @@ class JutSuNet :
     // ============================ Video Links =============================
 
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
-        val newsId = episode.url.substringBefore('|')
+        val stored = episode.url.substringBefore('|')
         val episodeValue = episode.url.substringAfter('|', "")
 
-        val iframeUrl = kodikIframeUrl(newsId) ?: return emptyList()
+        val iframeUrl = if (stored.startsWith("http")) {
+            stored
+        } else {
+            kodikIframeUrl(stored) ?: return emptyList()
+        }
         val player = client.newCall(GET(iframeUrl, headers)).awaitSuccess().bodyString()
 
         val ignoreSubs = preferences.getBoolean(PREF_IGNORE_SUBS_KEY, PREF_IGNORE_SUBS_DEFAULT)
@@ -310,6 +320,22 @@ class JutSuNet :
                     listOf(Video(playlistUrl, "$label - ${quality}p", playlistUrl))
                 }
             }
+    }
+
+    /** Ссылка на iframe Kodik из нового relay-плеера сайта. */
+    private suspend fun playerIframeUrl(animeId: String): String? {
+        val url = "$baseUrl/engine/ajax/controller.php".toHttpUrl().newBuilder()
+            .addQueryParameter("mod", "player")
+            .addQueryParameter("id", animeId)
+            .addQueryParameter("slot", "0")
+            .build()
+        return runCatching {
+            client.newCall(GET(url.toString(), headers))
+                .awaitSuccess()
+                .parseAs<PlayerResponse>()
+                .data
+                ?.src
+        }.getOrNull()?.takeIf { it.isNotBlank() }
     }
 
     private suspend fun kodikIframeUrl(newsId: String): String? {

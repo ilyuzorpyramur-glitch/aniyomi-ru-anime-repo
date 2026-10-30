@@ -28,3 +28,16 @@ class KodikLinkDto(
     val src: String = "",
     val type: String? = null,
 )
+
+@Serializable
+class PlayerResponse(
+    val status: Boolean = false,
+    val data: PlayerData? = null,
+)
+
+@Serializable
+class PlayerData(
+    val kind: String? = null,
+    val src: String? = null,
+    val name: String? = null,
+)
