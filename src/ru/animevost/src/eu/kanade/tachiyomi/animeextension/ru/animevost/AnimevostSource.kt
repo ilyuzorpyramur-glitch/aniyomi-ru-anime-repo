@@ -36,7 +36,7 @@ data class AnimeDescription(
 class AnimevostSource(
     override val name: String,
     override val baseUrl: String,
-): ParsedAnimeHttpLegacySource(),
+) : ParsedAnimeHttpLegacySource(),
     ConfigurableAnimeSource {
     private enum class SortBy(val by: String) {
         RATING("rating"),
@@ -61,7 +61,6 @@ class AnimevostSource(
 
     private val backgroundImgRegex by lazy { Regex("""background-image:\s*url\(([^)]+)\)""") }
 
-    // Helper to extract thumbnail from a given element
     /**
      * Постеры лежат на static.openni.ru, у которого просрочен сертификат
      * Let's Encrypt (до 21.10.2026). OkHttp отклоняет такие картинки, поэтому
@@ -72,6 +71,7 @@ class AnimevostSource(
         return if (fixed.contains("static.openni.ru")) fixed.replaceFirst("https://", "http://") else fixed
     }
 
+    // Helper to extract thumbnail from a given element
     private fun Element.extractThumbnail(): String? {
         // 1) direct img inside
         val img = selectFirst("img")
