@@ -113,7 +113,7 @@ class AniLibria :
                     date_upload = episode.updatedAt.toTimestamp()
                 }
             }
-            .sortedBy { it.episode_number }
+            .sortedByDescending { it.episode_number }
     }
 
     // ============================ Video Links =============================

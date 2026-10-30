@@ -151,7 +151,7 @@ class YummyAnime :
                     url = "$animeSlug|$num"
                 }
             }
-            .sortedBy { it.episode_number }
+            .sortedByDescending { it.episode_number }
 
         if (isMovie && episodes.size == 1) {
             episodes.first().name = "Фильм"

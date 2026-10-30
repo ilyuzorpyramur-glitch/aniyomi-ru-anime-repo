@@ -28,14 +28,12 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
-import okhttp3.CookieJar
 import okhttp3.FormBody
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import org.json.JSONObject
 import org.jsoup.nodes.Document
 import kotlin.time.Duration.Companion.seconds
 
@@ -71,122 +69,6 @@ class Rezka :
     // already is a browser UA. `super.headersBuilder()` keeps it, so it also stays current.
     override fun headersBuilder(): Headers.Builder = super.headersBuilder()
         .add("Referer", "$baseUrl/")
-
-    // hdrezka отдаёт «Проверяем, что вы не бот!» (Anubis, proof-of-work) части IP,
-    // в том числе серверным. Челлендж решается локально: sha256(randomData + nonce)
-    // с нужным числом ведущих нулей, затем pass-challenge выдаёт cookie.
-    @Volatile
-    private var anubisCookie: String? = null
-
-    override val client: OkHttpClient = network.client.newBuilder()
-        // Старые cookie (в том числе verification от Anubis) уводят сайт на зеркало
-        // с формой входа. Расширению свои cookie не нужны: авторизуемся сами.
-        .cookieJar(CookieJar.NO_COOKIES)
-        .addInterceptor { chain ->
-            // Первый же запрос авторизует сессию: без cookie сайт отвечает 301
-            // на зеркало с формой входа вместо каталога.
-            if (anubisCookie == null) anubisCookie = authorizeOnce
-            val original = chain.request()
-            val known = anubisCookie
-            val request = if (known != null && original.header("Cookie") == null) {
-                original.newBuilder().header("Cookie", known).build()
-            } else {
-                original
-            }
-            val response = chain.proceed(request)
-            if (request.url.encodedPath.contains(ANUBIS_PASS) || !isAnubisChallenge(response)) {
-                return@addInterceptor response
-            }
-            val cookie = solveAnubis(response) ?: return@addInterceptor response
-            anubisCookie = cookie
-            response.close()
-            chain.proceed(request.newBuilder().header("Cookie", cookie).build())
-        }
-        .build()
-
-    private val authorizeOnce: String? by lazy { authorize() }
-
-    private fun authorize(): String? = runCatching {
-        val plain = network.client.newBuilder().build()
-        plain.newCall(GET("$baseUrl/", headers)).execute().use { response ->
-            val html = response.peekText()
-            if (!html.contains("anubis_challenge")) return@runCatching null
-            solveAnubisHtml(html)
-        }
-    }.getOrNull()
-
-    // Приложение запрашивает gzip самостоятельно, поэтому OkHttp не распаковывает
-    // ответ: байты приходят сжатыми и строковый поиск по ним не работает.
-    private fun Response.peekText(): String {
-        val raw = peekBody(ANUBIS_PEEK).bytes()
-        val gzipped = raw.size > 2 && raw[0] == 0x1F.toByte() && raw[1] == 0x8B.toByte()
-        val bytes = if (gzipped) {
-            runCatching { java.util.zip.GZIPInputStream(raw.inputStream()).use { it.readBytes() } }
-                .getOrDefault(raw)
-        } else {
-            raw
-        }
-        return String(bytes)
-    }
-
-    private fun isAnubisChallenge(response: Response): Boolean = runCatching {
-        if (!response.isSuccessful) return@runCatching false
-        val type = response.body?.contentType()?.toString().orEmpty()
-        if (!type.contains("html")) return@runCatching false
-        response.peekText().contains("anubis_challenge")
-    }.getOrDefault(false)
-
-    private fun solveAnubis(response: Response): String? = runCatching {
-        solveAnubisHtml(response.peekText())
-    }.getOrNull()
-
-    private fun solveAnubisHtml(html: String): String? = runCatching {
-        val raw = CHALLENGE_REGEX.find(html)?.groupValues?.get(1) ?: return@runCatching null
-        val challenge = JSONObject(raw)
-        val payload = challenge.getJSONObject("challenge")
-        val data = payload.getString("randomData")
-        val difficulty = payload.optInt(
-            "difficulty",
-            challenge.optJSONObject("rules")?.optInt("difficulty") ?: 0,
-        )
-        val target = "0".repeat(difficulty)
-
-        val started = System.currentTimeMillis()
-        val sha = java.security.MessageDigest.getInstance("SHA-256")
-        var nonce = 0L
-        var hash: String
-        while (true) {
-            hash = sha.digest((data + nonce).toByteArray()).toHex()
-            if (hash.startsWith(target)) break
-            nonce++
-        }
-        // Слишком быстрое решение сервер не принимает.
-        val elapsed = (System.currentTimeMillis() - started).coerceAtLeast(300L)
-
-        val prefix = PREFIX_REGEX.find(html)?.groupValues?.get(1) ?: ANUBIS_DEFAULT_PREFIX
-        val url = "$baseUrl$prefix/pass-challenge".toHttpUrl().newBuilder()
-            .addQueryParameter("id", payload.getString("id"))
-            .addQueryParameter("response", hash)
-            .addQueryParameter("nonce", nonce.toString())
-            .addQueryParameter("redir", "/")
-            .addQueryParameter("elapsedTime", elapsed.toString())
-            .build()
-
-        // Отдельный клиент без этого перехватчика, иначе возможна рекурсия.
-        val plain = network.client.newBuilder().build()
-        plain.newCall(GET(url.toString(), headers)).execute().use { pass ->
-            val cookies = pass.headers.values("Set-Cookie")
-                .map { it.substringBefore(";").trim() }
-                .filter { it.contains("=") }
-            // Оставляем только подтверждённую cookie: verification-пара
-            // заставляет сайт отвечать 301 на зеркало с формой входа.
-            (cookies.filter { it.contains("-auth-") }.ifEmpty { cookies })
-                .joinToString("; ")
-                .ifBlank { null }
-        }
-    }.getOrNull()
-
-    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
     // get_cdn_series either answers within a second or hangs; cap it so a hang falls
     // through to the error path instead of holding the player for the app's 2-minute limit.
@@ -789,14 +671,6 @@ class Rezka :
     private class Translator(val name: String, val id: String, val active: Boolean)
 
     companion object {
-        private const val ANUBIS_PEEK = 64L * 1024
-        private const val ANUBIS_PASS = "/pass-challenge"
-        private const val ANUBIS_DEFAULT_PREFIX = "/.within.website/x/cmd/anubis/api"
-        private val CHALLENGE_REGEX = Regex(
-            """id="anubis_challenge"[^>]*>(.*?)</script>""",
-            RegexOption.DOT_MATCHES_ALL,
-        )
-        private val PREFIX_REGEX = Regex("""id="anubis_base_prefix"[^>]*>"?([^"<]+)"?""")
         private val qualityRegex = Regex("""(\d{3,4})\s*[pр]""")
         private val POST_ID_REGEX = Regex("""initCDN(?:Movies|Series)Events\((\d+)""")
         private val TRANSLATOR_ID_REGEX = Regex(

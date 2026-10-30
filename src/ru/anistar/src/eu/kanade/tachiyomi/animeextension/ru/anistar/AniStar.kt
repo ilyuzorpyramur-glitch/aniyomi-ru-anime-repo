@@ -231,7 +231,7 @@ class AniStar :
                     episode_number = number.toFloat()
                     scanlator = "AniStar"
                 }
-            }.sortedBy { it.episode_number }
+            }.sortedByDescending { it.episode_number }
         }
 
         val playerPath = document.select("iframe[src*=/player2/]")
@@ -271,7 +271,7 @@ class AniStar :
                 scanlator = dubName.ifBlank { "AniStar" }
             }
         }.distinctBy { it.episode_number }
-            .sortedBy { it.episode_number }
+            .sortedByDescending { it.episode_number }
     }
 
     // =============================== Video ================================

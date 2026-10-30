@@ -172,8 +172,8 @@ class JustSu :
 
             return@runBlocking grouped.entries
                 .sortedWith(
-                    compareBy<Map.Entry<Pair<Int, Float>, List<PlaylistItemDto>>> { it.key.first }
-                        .thenBy { it.key.second },
+                    compareByDescending<Map.Entry<Pair<Int, Float>, List<PlaylistItemDto>>> { it.key.first }
+                        .thenByDescending { it.key.second },
                 )
                 .map { (key, items) ->
                     val season = key.first
@@ -221,7 +221,7 @@ class JustSu :
                 episode_number = value.toFloatOrNull() ?: 1f
                 name = option.attr("data-title").trim().ifBlank { "Серия $value" }
             }
-        }.sortedBy { it.episode_number }
+        }.sortedByDescending { it.episode_number }
     }
 
     private fun Document.kodikIframeUrl(): String? = select("iframe[src*=kodikplayer]")

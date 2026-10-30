@@ -165,7 +165,7 @@ class DoramaLend :
                 episode_number = number
                 name = label.ifBlank { "Серия ${number.toInt()}" }
             }
-        }.sortedBy { it.episode_number }
+        }.sortedByDescending { it.episode_number }
     }
 
     // ============================ Video Links =============================
