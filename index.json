@@ -351,10 +351,10 @@
   {
     "name": "Aniyomi: Jut-su.net",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.jutsunet",
-    "apk": "aniyomi-ru.jutsunet-v14.2.apk",
+    "apk": "aniyomi-ru.jutsunet-v14.3.apk",
     "lang": "ru",
-    "code": 2,
-    "version": "14.2",
+    "code": 3,
+    "version": "14.3",
     "nsfw": 0,
     "sources": [
       {
