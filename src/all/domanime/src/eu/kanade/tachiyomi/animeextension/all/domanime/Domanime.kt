@@ -11,6 +11,7 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.awaitSuccess
+import java.net.URLDecoder
 import keiyoushi.utils.AnimeHttpLegacySource
 import keiyoushi.utils.addListPreference
 import keiyoushi.utils.getPreferencesLazy
@@ -177,9 +178,9 @@ class Domanime :
             .add("d_sign", params.optString("d_sign"))
             .add("pd", host)
             .add("pd_sign", params.optString("pd_sign"))
-            // ref в urlParams уже раскодирован JSON-парсером ("https://domanime.ru/"),
-            // регулярка с группой здесь не нужна и раньше падала с No group 1.
-            .add("ref", params.optString("ref"))
+            // ref в urlParams лежит percent-encoded ("https%3A%2F%2Fdomanime.ru%2F").
+            // FormBody кодирует повторно, поэтому сначала раскодируем сами.
+            .add("ref", URLDecoder.decode(params.optString("ref"), "UTF-8"))
             .add("ref_sign", params.optString("ref_sign"))
             .add("type", "seria")
             .add("id", id)
