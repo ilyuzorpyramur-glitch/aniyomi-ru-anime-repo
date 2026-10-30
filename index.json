@@ -385,6 +385,24 @@
     ]
   },
   {
+    "name": "Aniyomi: Jutsu TV",
+    "pkg": "eu.kanade.tachiyomi.animeextension.ru.jutsutv",
+    "apk": "aniyomi-ru.jutsutv-v14.1.apk",
+    "lang": "ru",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "Jutsu TV",
+        "lang": "ru",
+        "id": "4521804903917365109",
+        "baseUrl": "https://jutsu.tv",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: Kawaki",
     "pkg": "eu.kanade.tachiyomi.animeextension.all.kawaki",
     "apk": "aniyomi-all.kawaki-v14.1.apk",
