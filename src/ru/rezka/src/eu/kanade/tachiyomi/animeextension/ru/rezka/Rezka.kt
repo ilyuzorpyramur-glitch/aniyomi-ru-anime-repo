@@ -179,7 +179,6 @@ class Rezka :
         }
     }.getOrNull()
 
-
     // get_cdn_series either answers within a second or hangs; cap it so a hang falls
     // through to the error path instead of holding the player for the app's 2-minute limit.
     private val ajaxClient: OkHttpClient by lazy {
