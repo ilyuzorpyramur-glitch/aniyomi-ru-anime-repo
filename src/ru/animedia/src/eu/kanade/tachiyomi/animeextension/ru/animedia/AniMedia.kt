@@ -16,6 +16,7 @@ import keiyoushi.utils.addListPreference
 import keiyoushi.utils.addSwitchPreference
 import keiyoushi.utils.getPreferencesLazy
 import keiyoushi.utils.parallelCatchingFlatMap
+import keiyoushi.utils.bodyString
 import keiyoushi.utils.parseAs
 import keiyoushi.utils.useAsJsoup
 import kotlinx.coroutines.runBlocking
@@ -367,6 +368,7 @@ class AniMedia :
     private fun String.squeezeSlashes(): String = replace(Regex("(?<=^https?://[^/]{1,80})//+"), "/")
 
     companion object {
+        private val RESOLUTION_REGEX = Regex("""RESOLUTION=\d+x(\d+)""")
         private const val API_URL = "https://plapi.cdnvideohub.com/api/v1"
         private const val SEARCH_PAGE_SIZE = 12
 
