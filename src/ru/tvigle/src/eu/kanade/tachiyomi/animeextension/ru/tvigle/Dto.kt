@@ -26,7 +26,8 @@ class ProductDto(
     val thumbnail: String? = null,
     val genres: List<String> = emptyList(),
     val countries: List<String> = emptyList(),
-    @SerialName("release_year") val releaseYear: Int? = null,
+    // API отдаёт и год, и диапазон («2022-2025»), поэтому строкой.
+    @SerialName("release_year") val releaseYear: String? = null,
     @SerialName("age_restrictions") val ageRestrictions: String? = null,
     @SerialName("kinopoisk_rating") val kinopoiskRating: String? = null,
     @SerialName("imdb_rating") val imdbRating: String? = null,
