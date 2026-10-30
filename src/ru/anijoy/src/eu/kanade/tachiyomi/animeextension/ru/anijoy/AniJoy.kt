@@ -115,6 +115,13 @@ class AniJoy :
         initialized = false
     }
 
+    /** Kodik живёт на многих доменах; недоступный подменяем на рабочий. */
+    private fun playerUrl(raw: String): String {
+        val absolute = absoluteUrl(raw)
+        if (!absolute.contains("kodik", ignoreCase = true)) return absolute
+        return absolute.replace(KODIK_HOST_REGEX, "//$PLAYER_HOST/")
+    }
+
     private fun absoluteUrl(raw: String): String = when {
         raw.startsWith("http://") || raw.startsWith("https://") -> raw
         raw.startsWith("//") -> "https:$raw"
@@ -183,7 +190,7 @@ class AniJoy :
             val number = item.opt(EP_NUMBER)?.toString()?.toFloatOrNull() ?: 0f
             val player = item.optString(EP_PLAYER).takeIf { it.isNotBlank() }
                 ?: return@mapNotNull null
-            val url = absoluteUrl(player)
+            val url = playerUrl(player)
             episodeMeta[url] = animeId to number
 
             SEpisode.create().apply {
@@ -235,6 +242,10 @@ class AniJoy :
     companion object {
         private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+
+        private const val PLAYER_HOST = "kodikplayer.com"
+
+        private val KODIK_HOST_REGEX = Regex("//kodik[a-z0-9.-]*\.[a-z]{2,}/")
 
         private const val PER_PAGE = 24
         private const val DEFAULT_SORT = "popular"
