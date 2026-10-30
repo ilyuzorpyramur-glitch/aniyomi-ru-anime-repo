@@ -378,8 +378,7 @@ class AniSprout :
         return SAnime.create().apply {
             url = path
             title = link.text().unquote()
-            thumbnail_url = selectFirst("img.card-image")?.absUrl("src")?.fullSizePoster()?.takeIf { it.isNotBlank() }
-                ?: parent()?.selectFirst("img.card-image")?.absUrl("src")?.fullSizePoster()?.takeIf { it.isNotBlank() }
+            thumbnail_url = posterOf(this) ?: parent()?.let { posterOf(it) }
         }
     }
 
@@ -390,11 +389,22 @@ class AniSprout :
         return SAnime.create().apply {
             url = path
             title = link.text().unquote()
-            thumbnail_url = parent()?.parent()?.selectFirst("img.card-image")
-                ?.absUrl("src")
-                ?.fullSizePoster()
-                ?.takeIf { it.isNotBlank() }
+            thumbnail_url = parent()?.parent()?.let { posterOf(it) }
         }
+    }
+
+    // absUrl() отдаёт пустую строку, если карточка оторвана от документа, поэтому
+    // адрес собираем сами: иначе часть постеров уходит без схемы и не грузится.
+    private fun posterOf(root: Element): String? {
+        val raw = root.selectFirst("img.card-image")?.attr("src").orEmpty()
+        val absolute = when {
+            raw.isBlank() -> return null
+            raw.startsWith("http://") || raw.startsWith("https://") -> raw
+            raw.startsWith("//") -> "https:$raw"
+            raw.startsWith("/") -> baseUrl.trimEnd('/') + raw
+            else -> baseUrl.trimEnd('/') + "/" + raw
+        }
+        return absolute.fullSizePoster().takeIf { it.isNotBlank() }
     }
 
     /** Cards point at the 178x256 resize; dropping that segment yields the full poster. */
