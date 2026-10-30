@@ -24,6 +24,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URLDecoder
+import java.util.zip.GZIPInputStream
 
 class Domanime :
     AnimeHttpLegacySource(),
@@ -329,7 +330,15 @@ class Domanime :
     private fun JSONArray?.toNumbers(): List<Int> = if (this == null) emptyList() else (0 until length()).mapNotNull { optInt(it).takeIf { n -> n > 0 } }
 
     private fun Response.bodyText(): String {
-        val bytes = peekBody(Long.MAX_VALUE).bytes()
+        val raw = peekBody(Long.MAX_VALUE).bytes()
+        // Kodik на POST /ftor отдаёт gzip даже без Accept-Encoding. OkHttp такой
+        // ответ не распаковывает сам, и JSON парсился из мусорных байтов.
+        val gzipped = raw.size > 2 && raw[0] == 0x1F.toByte() && raw[1] == 0x8B.toByte()
+        val bytes = if (gzipped) {
+            runCatching { GZIPInputStream(raw.inputStream()).use { it.readBytes() } }.getOrDefault(raw)
+        } else {
+            raw
+        }
         val head = String(bytes, 0, minOf(bytes.size, 2048), Charsets.ISO_8859_1).lowercase()
         val charset = if ("charset=windows-1251" in head) WINDOWS_1251 else Charsets.UTF_8
         return String(bytes, charset)
