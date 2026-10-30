@@ -177,7 +177,9 @@ class Domanime :
             .add("d_sign", params.optString("d_sign"))
             .add("pd", host)
             .add("pd_sign", params.optString("pd_sign"))
-            .add("ref", REF_REGEX.find(params.optString("ref"))?.let { it.groupValues[1] } ?: params.optString("ref"))
+            // ref в urlParams уже раскодирован JSON-парсером ("https://domanime.ru/"),
+            // регулярка с группой здесь не нужна и раньше падала с No group 1.
+            .add("ref", params.optString("ref"))
             .add("ref_sign", params.optString("ref_sign"))
             .add("type", "seria")
             .add("id", id)
@@ -355,6 +357,5 @@ class Domanime :
         private val PAGE_REGEX = Regex("""/page/(\d+)/""")
         private val QUALITY_REGEX = Regex("""(\d{3,4})p""")
         private val URL_PARAMS_REGEX = Regex("""urlParams\s*=\s*'(\{.*?\})'""", RegexOption.DOT_MATCHES_ALL)
-        private val REF_REGEX = Regex("""https%3A%2F%2F[^"]*""")
     }
 }
