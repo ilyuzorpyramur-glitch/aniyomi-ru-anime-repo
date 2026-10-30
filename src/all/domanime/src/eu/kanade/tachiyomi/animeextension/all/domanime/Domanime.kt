@@ -18,6 +18,7 @@ import okhttp3.FormBody
 import okhttp3.Headers
 import okhttp3.Request
 import okhttp3.Response
+import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -100,31 +101,32 @@ class Domanime :
 
     override fun episodeListParse(response: Response): List<SEpisode> {
         val doc = response.parseDocument()
-        val kodik = doc.kodikPayload()
+        val translators = doc.kodikPayload()?.optJSONObject("translators")
+        val translator = translators?.keys()?.asSequence()?.firstOrNull()
 
-        if (kodik != null) {
-            val translators = kodik.optJSONObject("translators")
-            val names = translators?.keys()?.asSequence()?.toList().orEmpty()
+        if (translator != null) {
+            // seasons приходит и массивом, и объектом с ключами "1", "2", ...
+            val seasons = translators.optJSONObject(translator)?.opt("seasons").toSeasonList()
+            val episodes = mutableListOf<SEpisode>()
+            var number = 0
 
-            for (name in names) {
-                val season = translators?.optJSONObject(name)
-                    ?.optJSONObject("seasons")
-                    ?.optJSONObject("1")
-                    ?: continue
-                val link = season.optString("link").toAbsoluteUrl().takeIf { it.startsWith("http") } ?: continue
-                val list = season.optJSONArray("list")
-                val last = list?.optInt((list.length() - 1).coerceAtLeast(0), 0) ?: 0
-                val count = if (list != null && last > 0) last else 1
-
-                return (1..count).map { number ->
-                    SEpisode.create().apply {
-                        url = "kodik|$name|$link|$number"
+            seasons.forEach { season ->
+                val link = season.optString("link").toAbsoluteUrl().takeIf { it.startsWith("http") }
+                    ?: return@forEach
+                // list хранит номера серий внутри сезона, поэтому нумеруем подряд:
+                // иначе серии разных сезонов получают одинаковые номера.
+                season.optJSONArray("list").toNumbers().forEach { local ->
+                    number += 1
+                    episodes += SEpisode.create().apply {
+                        url = "kodik|$translator|$link|$local"
                         episode_number = number.toFloat()
                         this.name = "Серия $number"
-                        scanlator = name
+                        scanlator = translator
                     }
                 }
             }
+
+            if (episodes.isNotEmpty()) return episodes
         }
 
         return listOf(
@@ -311,6 +313,18 @@ class Domanime :
     }
 
     private fun Response.parseDocument(): Document = Jsoup.parse(bodyText(), baseUrl)
+
+    private fun Any?.toSeasonList(): List<JSONObject> = when (this) {
+        is JSONArray -> (0 until length()).mapNotNull { optJSONObject(it) }
+        is JSONObject -> keys().asSequence()
+            .sortedBy { it.toIntOrNull() ?: Int.MAX_VALUE }
+            .mapNotNull { optJSONObject(it) }
+            .toList()
+        else -> emptyList()
+    }
+
+    private fun JSONArray?.toNumbers(): List<Int> =
+        if (this == null) emptyList() else (0 until length()).mapNotNull { optInt(it).takeIf { n -> n > 0 } }
 
     private fun Response.bodyText(): String {
         val bytes = peekBody(Long.MAX_VALUE).bytes()
