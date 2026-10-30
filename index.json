@@ -333,10 +333,10 @@
   {
     "name": "Aniyomi: HDRezka",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.rezka",
-    "apk": "aniyomi-ru.rezka-v14.5.apk",
+    "apk": "aniyomi-ru.rezka-v14.6.apk",
     "lang": "ru",
-    "code": 5,
-    "version": "14.5",
+    "code": 6,
+    "version": "14.6",
     "nsfw": 0,
     "sources": [
       {
