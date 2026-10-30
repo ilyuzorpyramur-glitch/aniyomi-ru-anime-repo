@@ -331,6 +331,24 @@
     ]
   },
   {
+    "name": "Aniyomi: HDRezka",
+    "pkg": "eu.kanade.tachiyomi.animeextension.ru.rezka",
+    "apk": "aniyomi-ru.rezka-v14.1.apk",
+    "lang": "ru",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "HDRezka",
+        "lang": "ru",
+        "id": "2810967597003075487",
+        "baseUrl": "https://hdrezka.me",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: JustSu",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.justsu",
     "apk": "aniyomi-ru.justsu-v14.2.apk",
