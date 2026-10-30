@@ -112,7 +112,10 @@ class AniSprout :
         return SAnime.create().apply {
             url = response.request.url.encodedPath
             title = document.selectFirst("h1")?.text()?.trim().orEmpty()
+            // og:image на части страниц относительный — приводим к абсолютному виду.
             thumbnail_url = document.selectFirst("meta[property=og:image]")?.attr("content")
+                ?.takeIf { it.isNotBlank() }
+                ?.let { absoluteUrl(it) }
             genre = document.select("ul.tag-list .tag-link").joinToString { it.text().trim() }
             status = when {
                 episodesInfo == null -> SAnime.UNKNOWN
@@ -397,14 +400,15 @@ class AniSprout :
     // адрес собираем сами: иначе часть постеров уходит без схемы и не грузится.
     private fun posterOf(root: Element): String? {
         val raw = root.selectFirst("img.card-image")?.attr("src").orEmpty()
-        val absolute = when {
-            raw.isBlank() -> return null
-            raw.startsWith("http://") || raw.startsWith("https://") -> raw
-            raw.startsWith("//") -> "https:$raw"
-            raw.startsWith("/") -> baseUrl.trimEnd('/') + raw
-            else -> baseUrl.trimEnd('/') + "/" + raw
-        }
-        return absolute.fullSizePoster().takeIf { it.isNotBlank() }
+        if (raw.isBlank()) return null
+        return absoluteUrl(raw).fullSizePoster().takeIf { it.isNotBlank() }
+    }
+
+    private fun absoluteUrl(raw: String): String = when {
+        raw.startsWith("http://") || raw.startsWith("https://") -> raw
+        raw.startsWith("//") -> "https:$raw"
+        raw.startsWith("/") -> baseUrl.trimEnd('/') + raw
+        else -> baseUrl.trimEnd('/') + "/" + raw
     }
 
     /** Cards point at the 178x256 resize; dropping that segment yields the full poster. */
