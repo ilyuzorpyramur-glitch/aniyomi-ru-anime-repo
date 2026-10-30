@@ -128,10 +128,10 @@
   {
     "name": "Aniyomi: AnimeSSS",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.animesss",
-    "apk": "aniyomi-ru.animesss-v14.3.apk",
+    "apk": "aniyomi-ru.animesss-v14.4.apk",
     "lang": "ru",
-    "code": 3,
-    "version": "14.3",
+    "code": 4,
+    "version": "14.4",
     "nsfw": 0,
     "sources": [
       {
@@ -351,10 +351,10 @@
   {
     "name": "Aniyomi: JustSu",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.justsu",
-    "apk": "aniyomi-ru.justsu-v14.5.apk",
+    "apk": "aniyomi-ru.justsu-v14.6.apk",
     "lang": "ru",
-    "code": 5,
-    "version": "14.5",
+    "code": 6,
+    "version": "14.6",
     "nsfw": 0,
     "sources": [
       {
