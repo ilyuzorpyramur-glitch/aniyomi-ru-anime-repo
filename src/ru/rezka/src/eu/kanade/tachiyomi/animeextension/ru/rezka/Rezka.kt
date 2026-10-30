@@ -97,15 +97,29 @@ class Rezka :
         }
         .build()
 
+    // Приложение запрашивает gzip самостоятельно, поэтому OkHttp не распаковывает
+    // ответ: байты приходят сжатыми и строковый поиск по ним не работает.
+    private fun Response.peekText(): String {
+        val raw = peekBody(ANUBIS_PEEK).bytes()
+        val gzipped = raw.size > 2 && raw[0] == 0x1F.toByte() && raw[1] == 0x8B.toByte()
+        val bytes = if (gzipped) {
+            runCatching { java.util.zip.GZIPInputStream(raw.inputStream()).use { it.readBytes() } }
+                .getOrDefault(raw)
+        } else {
+            raw
+        }
+        return String(bytes)
+    }
+
     private fun isAnubisChallenge(response: Response): Boolean = runCatching {
         if (!response.isSuccessful) return@runCatching false
         val type = response.body?.contentType()?.toString().orEmpty()
         if (!type.contains("html")) return@runCatching false
-        response.peekBody(ANUBIS_PEEK).string().contains("anubis_challenge")
+        response.peekText().contains("anubis_challenge")
     }.getOrDefault(false)
 
     private fun solveAnubis(response: Response): String? = runCatching {
-        val html = response.peekBody(ANUBIS_PEEK).string()
+        val html = response.peekText()
         val raw = CHALLENGE_REGEX.find(html)?.groupValues?.get(1) ?: return@runCatching null
         val challenge = JSONObject(raw)
         val payload = challenge.getJSONObject("challenge")
