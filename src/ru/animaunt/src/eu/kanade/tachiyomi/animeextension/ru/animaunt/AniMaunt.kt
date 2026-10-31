@@ -1,5 +1,10 @@
 package eu.kanade.tachiyomi.animeextension.ru.animaunt
 
+import android.app.Application
+import android.content.SharedPreferences
+import androidx.preference.PreferenceScreen
+import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
+import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
@@ -12,8 +17,10 @@ import okhttp3.Headers
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.Jsoup
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
-class AniMaunt : AnimeHttpLegacySource() {
+class AniMaunt : AnimeHttpLegacySource(), ConfigurableAnimeSource {
 
     override val name = "AniMaunt"
 
@@ -23,116 +30,132 @@ class AniMaunt : AnimeHttpLegacySource() {
 
     override val supportsLatest = true
 
+    private val preferences: SharedPreferences by lazy {
+        Injekt.get<Application>().getSharedPreferences("source_$id", 0)
+    }
+
     override fun headersBuilder(): Headers.Builder = super.headersBuilder()
         .add("Referer", "$baseUrl/")
         .add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
 
-    // =============================== Популярное (Каталог) ===============================
-    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/anime/page/$page/", headers)
+    // =============================== Popular ===============================
 
-    override fun popularAnimeParse(response: Response): AnimesPage = parseAnimeList(response)
+    override fun popularAnimeRequest(page: Int): Request =
+        GET("$baseUrl/anime/page/$page/", headers)
 
-    // =============================== Последние обновления ===============================
-    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/ongoing/page/$page/", headers)
-
-    override fun latestUpdatesParse(response: Response): AnimesPage = parseAnimeList(response)
-
-    // =============================== Поиск ===============================
-    override fun searchAnimeRequest(page: Int, query: String, filters: eu.kanade.tachiyomi.animesource.model.AnimeFilterList): Request {
-        val body = FormBody.Builder()
-            .add("do", "search")
-            .add("subaction", "search")
-            .add("search_start", page.toString())
-            .add("story", query)
-            .build()
-        return POST("$baseUrl/index.php?do=search", headers, body)
-    }
-
-    override fun searchAnimeParse(response: Response): AnimesPage = parseAnimeList(response)
-
-    private fun parseAnimeList(response: Response): AnimesPage {
-        val doc = Jsoup.parse(response.body!!.string(), response.request.url.toString())
-        val items = doc.select(".th-item, .short-item, .movie-item, article.story")
+    override fun popularAnimeParse(response: Response): AnimesPage {
+        val document = Jsoup.parse(response.body!!.string())
+        val items = document.select(".th-item")
         val animes = items.map { element ->
             SAnime.create().apply {
-                val link = element.selectFirst("a")
-                val img = element.selectFirst("img")
-                title = element.select(".th-title, .short-title, .movie-title, .story-title").text().ifEmpty { img?.attr("alt") ?: "Anime" }
-                url = link?.attr("href")?.substringAfter(baseUrl) ?: ""
-                thumbnail_url = img?.attr("abs:data-src")?.ifEmpty { null } ?: img?.attr("abs:src")
+                val anchor = element.selectFirst("a.th-in")
+                url = anchor?.attr("href")?.substringAfter(baseUrl) ?: ""
+                title = element.select(".th-title").text()
+                thumbnail_url = baseUrl + element.select("img").attr("src")
             }
-        }.filter { it.url.isNotEmpty() && it.title.isNotEmpty() }
-        val hasNext = doc.select(".pagi-next, .navigation a:contains(Далее), .navigation a:contains(Вперед)").isNotEmpty()
-        return AnimesPage(animes, hasNext)
+        }
+        val hasNextPage = document.select(".pagi-nav a:contains(Далее)").isNotEmpty()
+        return AnimesPage(animes, hasNextPage)
     }
 
-    // =============================== Детали аниме ===============================
+    // =============================== Latest ===============================
+
+    override fun latestUpdatesRequest(page: Int): Request =
+        GET("$baseUrl/ongoing/page/$page/", headers)
+
+    override fun latestUpdatesParse(response: Response): AnimesPage = popularAnimeParse(response)
+
+    // =============================== Search ===============================
+
+    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
+        if (query.length < 3) throw Exception("Запрос слишком короткий")
+        return POST(
+            "$baseUrl/index.php?do=search",
+            headers,
+            FormBody.Builder()
+                .add("do", "search")
+                .add("subaction", "search")
+                .add("search_start", page.toString())
+                .add("full_search", "0")
+                .add("result_from", ((page - 1) * 10).toString())
+                .add("story", query)
+                .build()
+        )
+    }
+
+    override fun searchAnimeParse(response: Response): AnimesPage = popularAnimeParse(response)
+
+    // =============================== Details ===============================
+
     override fun animeDetailsParse(response: Response): SAnime {
-        val doc = Jsoup.parse(response.body!!.string(), response.request.url.toString())
+        val document = Jsoup.parse(response.body!!.string())
         return SAnime.create().apply {
-            title = doc.select("h1, .full-title, .short-title").first()?.text()?.replace("смотреть онлайн", "", true)?.trim() ?: "Unknown"
-            thumbnail_url = doc.select(".fposter img, .movie-img img, meta[property='og:image']").attr("abs:src").ifEmpty { doc.select("meta[property='og:image']").attr("content") }
-            description = doc.select(".ftext, .full-text, #full-news, .movie-desc").text()
-            genre = doc.select("a[href*='/genre/']").joinToString { it.text() }
-            val statusText = doc.select(".finfo, .full-info, .movie-info").text()
-            status = when {
-                statusText.contains("завершен", true) || statusText.contains("вышел", true) -> SAnime.COMPLETED
-                statusText.contains("онгоинг", true) || statusText.contains("выходит", true) -> SAnime.ONGOING
-                else -> SAnime.UNKNOWN
-            }
-        }
-    }Text.contains("онгоинг", true) -> SAnime.ONGOING
-                else -> SAnime.UNKNOWN
-            }
-            author = doc.select("a[href*='/studio/']").text()
+            title = document.select("h1").text()
+            thumbnail_url = baseUrl + document.select(".fposter img").attr("src")
+            description = document.select(".ftext.full-text").text()
+            genre = document.select(".finfo li:contains(Жанр) a").joinToString { it.text() }
+            status = parseStatus(document.select(".finfo li:contains(Статус)").text())
+            author = document.select(".finfo li:contains(Студия) a").text()
         }
     }
 
-    // =============================== Список серий ===============================
+    private fun parseStatus(status: String): Int = when {
+        status.contains("выходит", true) -> SAnime.ONGOING
+        status.contains("завершен", true) -> SAnime.COMPLETED
+        else -> SAnime.UNKNOWN
+    }
+
+    // =============================== Episodes ===============================
+
     override fun episodeListParse(response: Response): List<SEpisode> {
-        val doc = Jsoup.parse(response.body!!.string(), response.request.url.toString())
+        val document = Jsoup.parse(response.body!!.string())
         val episodes = mutableListOf<SEpisode>()
 
-        // AniMaunt использует плееры (Kodik/Dzen/etc) во вкладках.
-        // Обычно список серий зашит в самом плеере, но для структуры Aniyomi
-        // мы создаем запись, которая ведет на страницу с плеером.
-        val episode = SEpisode.create().apply {
-            name = "Смотреть онлайн"
-            episode_number = 1f
-            url = response.request.url.toString()
-            date_upload = 0L
+        // AniMaunt uses a script-based player or tabs.
+        // We extract the player URL which usually contains the episode list.
+        val playerIframe = document.select("#video-player iframe").attr("src")
+
+        // If no iframe, we look for data-attributes in the player div
+        val playerDiv = document.select("#video-player")
+
+        // Legacy sites often have a simple list or a script.
+        // For AniMaunt, we'll assume the standard DLE structure where episodes are in the player.
+        // Since we can't execute JS, we return a single entry pointing to the page if it's a movie,
+        // or try to find the episode count from the info block.
+
+        val epInfo = document.select(".finfo li:contains(Серии)").text()
+        val totalEpisodes = Regex("(\\d+) из").find(epInfo)?.groupValues?.get(1)?.toIntOrNull() ?: 1
+
+        for (i in totalEpisodes downTo 1) {
+            episodes.add(SEpisode.create().apply {
+                name = "Серия $i"
+                episode_number = i.toFloat()
+                url = response.request.url.toString() + "?ep=$i"
+            })
         }
-        episodes.add(episode)
 
         return episodes
     }
 
-    // =============================== Видео (Плеер) ===============================
+    // =============================== Video Links ===============================
+
     override fun videoListParse(response: Response): List<Video> {
-        val doc = Jsoup.parse(response.body!!.string(), response.request.url.toString())
-        val videos = mutableListOf<Video>()
+        val document = Jsoup.parse(response.body!!.string())
+        val videoList = mutableListOf<Video>()
 
-        // Ищем iframe плееров
-        doc.select("iframe").forEach { iframe ->
-            var src = iframe.attr("src")
-            if (src.startsWith("//")) src = "https:$src"
-
-            if (src.contains("kodik") || src.contains("aniqit")) {
-                videos.add(Video(src, "Kodik (External)", src))
-            } else if (src.contains("dzen") || src.contains("vk.com")) {
-                videos.add(Video(src, "Player (External)", src))
-            }
+        // AniMaunt typically uses Kodik or their own player.
+        // We look for the iframe source.
+        val iframeUrl = document.select(".video-inside iframe").attr("src").let {
+            if (it.startsWith("//")) "https:$it" else it
         }
 
-        // Если плееры скрыты в скриптах или data-атрибутах
-        val scripts = doc.select("script").html()
-        val kodikRegex = Regex("""https?://[^\s"']+(?:kodik|aniqit)[^\s"']+""")
-        kodikRegex.findAll(scripts).forEach { match ->
-            videos.add(Video(match.value, "Kodik (Found)", match.value))
+        if (iframeUrl.isNotEmpty()) {
+            videoList.add(Video(iframeUrl, "Player", iframeUrl))
         }
 
-        return videos
+        return videoList
     }
 
-    override fun videoUrlParse(response: Response): String = ""
+    override fun setupPreferenceScreen(screen: PreferenceScreen) {}
 }
+```
