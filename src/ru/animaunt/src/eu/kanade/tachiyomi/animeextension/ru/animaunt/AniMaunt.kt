@@ -12,7 +12,6 @@ import okhttp3.Headers
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.Jsoup
-import org.jsoup.nodes.Document
 
 class AniMaunt : AnimeHttpLegacySource() {
 
@@ -29,14 +28,12 @@ class AniMaunt : AnimeHttpLegacySource() {
         .add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
 
     // =============================== Популярное (Каталог) ===============================
-    override fun popularAnimeRequest(page: Int): Request =
-        GET("$baseUrl/anime/page/$page/", headers)
+    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/anime/page/$page/", headers)
 
     override fun popularAnimeParse(response: Response): AnimesPage = parseAnimeList(response)
 
     // =============================== Последние обновления ===============================
-    override fun latestUpdatesRequest(page: Int): Request =
-        GET("$baseUrl/ongoing/page/$page/", headers)
+    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/ongoing/page/$page/", headers)
 
     override fun latestUpdatesParse(response: Response): AnimesPage = parseAnimeList(response)
 
@@ -88,8 +85,8 @@ class AniMaunt : AnimeHttpLegacySource() {
         val doc = Jsoup.parse(response.body!!.string(), response.request.url.toString())
         val episodes = mutableListOf<SEpisode>()
 
-        // AniMaunt использует плееры (Kodik/Dzen/etc) во вкладках. 
-        // Обычно список серий зашит в самом плеере, но для структуры Aniyomi 
+        // AniMaunt использует плееры (Kodik/Dzen/etc) во вкладках.
+        // Обычно список серий зашит в самом плеере, но для структуры Aniyomi
         // мы создаем запись, которая ведет на страницу с плеером.
         val episode = SEpisode.create().apply {
             name = "Смотреть онлайн"
@@ -111,7 +108,7 @@ class AniMaunt : AnimeHttpLegacySource() {
         doc.select("iframe").forEach { iframe ->
             var src = iframe.attr("src")
             if (src.startsWith("//")) src = "https:$src"
-            
+
             if (src.contains("kodik") || src.contains("aniqit")) {
                 videos.add(Video(src, "Kodik (External)", src))
             } else if (src.contains("dzen") || src.contains("vk.com")) {
