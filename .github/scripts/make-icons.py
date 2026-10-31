@@ -29,6 +29,9 @@ SCALE = MASTER / 192
 
 # ext dir -> (monogram, accent rgb, dark fill rgb)
 ICONS = {
+    "animaunt": ("AN", (218, 98, 112), (59, 22, 27)),
+    "2x2tv": ("2X2", (120, 170, 235), (18, 24, 38)),
+    "smotretanime": ("ВХ", (208, 218, 98), (56, 59, 22)),
     "works": ("WOR", (120, 170, 235), (18, 24, 38)),
     "animestars": ("ANI", (120, 170, 235), (18, 24, 38)),
     "aniplay": ("ANI", (120, 170, 235), (18, 24, 38)),
