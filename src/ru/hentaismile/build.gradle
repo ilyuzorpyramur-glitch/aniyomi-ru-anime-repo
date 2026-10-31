@@ -1,0 +1,12 @@
+ext {
+    extName = 'HentaiSmile®'
+    extClass = '.HentaiSmile'
+    extVersionCode = 1
+    isNsfw = true
+}
+
+apply plugin: "kei.plugins.extension.legacy"
+
+dependencies {
+    implementation(project(':lib:playlistutils'))
+}
