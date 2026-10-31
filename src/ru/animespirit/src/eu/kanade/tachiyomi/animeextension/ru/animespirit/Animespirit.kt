@@ -96,17 +96,17 @@ class Animespirit : AnimeHttpLegacySource() {
     override fun episodeListParse(response: Response): List<SEpisode> {
         val document = response.asJsoup()
         val episodes = mutableListOf<SEpisode>()
-        
+
         // Базовая логика для DLE плееров
         val playerElement = document.selectFirst("div.video-player, #video-player")
-        
+
         episodes.add(SEpisode.create().apply {
             name = "Смотреть онлайн"
             episode_number = 1f
             url = response.request.url.toString()
             date_upload = System.currentTimeMillis()
         })
-        
+
         return episodes.reversed()
     }
 
@@ -129,11 +129,11 @@ class Animespirit : AnimeHttpLegacySource() {
     override fun episodeListParse(response: Response): List<SEpisode> {
         val document = Jsoup.parse(response.body!!.string(), response.request.url.toString())
         val episodes = mutableListOf<SEpisode>()
-        
+
         // Animespirit часто использует один плеер с переключателем серий внутри iframe
-        // или список ссылок в описании. В legacy-варианте создаем одну запись, 
+        // или список ссылок в описании. В legacy-варианте создаем одну запись,
         // так как плеер сам управляет сериями.
-        
+
         val ep = SEpisode.create().apply {
             name = "Смотреть онлайн"
             episode_number = 1f
@@ -141,7 +141,7 @@ class Animespirit : AnimeHttpLegacySource() {
             date_upload = 0L
         }
         episodes.add(ep)
-        
+
         return episodes
     }
 
