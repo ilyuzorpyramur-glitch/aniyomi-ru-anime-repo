@@ -71,7 +71,13 @@ class AniMaunt :
 
     override fun latestUpdatesParse(response: Response): AnimesPage = parseList(response)
 
+    override fun getFilterList() = FILTERS
+
     override fun searchAnimeRequest(page: Int, query: String, filters: eu.kanade.tachiyomi.animesource.model.AnimeFilterList): Request {
+        val section = SECTIONS.getOrNull(SECTIONS_FILTER.state - 1)?.second
+        val genre = GENRES.getOrNull(GENRES_FILTER.state - 1)?.second
+        val path = genre ?: section ?: CATALOG_PATH
+        if (query.isBlank()) return GET(pageUrl(path, page), headers)
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
         val url = "$baseUrl" + SEARCH_PATH.replace("{query}", encoded)
         return GET(url, headers)
@@ -352,6 +358,49 @@ class AniMaunt :
 
         private const val CATALOG_PATH = "/anime/"
         private const val LATEST_PATH = "/anime/"
+
+        private val SECTIONS = listOf(
+        "Апокалипсис" to "/anime/apokalipsis/",
+        "Боевик" to "/anime/boevik/",
+        "Боевые искусства" to "/anime/boevye-iskusstva/",
+        "Вампиры" to "/anime/vampiry/",
+        "Война" to "/anime/vojna/",
+        "Гарем" to "/anime/garem/",
+        "Детектив" to "/anime/detektiv/",
+        "Детское" to "/anime/detskoe/",
+        "Драма" to "/anime/drama/",
+        "Игры" to "/anime/igry/",
+        "Исторический" to "/anime/istoricheskij/",
+        "Киберпанк" to "/anime/kiberpank/",
+        "Комедия" to "/anime/komediya/",
+        "Космос" to "/anime/kosmos/",
+        "Магия" to "/anime/magia/",
+        "Меха" to "/anime/meha/",
+        "Мистика" to "/anime/mistika/",
+        "Музыка" to "/anime/muzyka/",
+        "Пародия" to "/anime/parodiya/",
+        "Повседневность" to "/anime/povsednevnost/",
+        "Приключения" to "/anime/priklyucheniya/",
+        "Психология" to "/anime/psihologiya/",
+        "Романтика" to "/anime/romantika/",
+        "Сверхъестественное" to "/anime/sverhestestvennoe/"
+        )
+
+        private val GENRES = listOf(
+        "Все" to ""
+        )
+
+        private val SECTIONS_FILTER = eu.kanade.tachiyomi.animesource.model.AnimeFilter.Select<String>(
+            "Раздел",
+            SECTIONS.map { it.first }.toTypedArray(),
+        )
+
+        private val GENRES_FILTER = eu.kanade.tachiyomi.animesource.model.AnimeFilter.Select<String>(
+            "Жанр",
+            GENRES.map { it.first }.toTypedArray(),
+        )
+
+        private val FILTERS = eu.kanade.tachiyomi.animesource.model.AnimeFilterList(SECTIONS_FILTER)
         private const val SEARCH_PATH = "/?do=search&subaction=search&story={query}"
         private const val PAGE_SUFFIX = "page/{page}/"
         private const val PAGE_MARKER = "page/"
@@ -365,7 +414,6 @@ class AniMaunt :
         private const val RELAY_URL = "/engine/ajax/controller.php?mod=player&id={id}&slot={slot}"
         private const val MAX_SLOTS = 4
         private const val PLAYER_MODE = "iframe"
-
         // Плеер лежит либо в <iframe src>, либо в data-iframe у кнопки серии.
         // «[HD (720p)]https://host/video/720/1.mp4» — метка и адрес.
         private val LABELED_URL = Regex(
