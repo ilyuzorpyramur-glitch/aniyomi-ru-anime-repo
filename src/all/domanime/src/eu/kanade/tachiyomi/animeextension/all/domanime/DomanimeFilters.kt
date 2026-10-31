@@ -6,8 +6,6 @@ import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 object DomanimeFilters {
 
     private val GENRES = listOf(
-        "Все" to "",
-        "Экшен" to "85",
         "Боевик" to "6",
         "Биография" to "180",
         "Вестерн" to "214",
@@ -25,15 +23,23 @@ object DomanimeFilters {
         "Ужасы" to "18",
         "Фантастика" to "19",
         "Фэнтези" to "20",
+        "Экшен" to "85",
     )
 
     private val YEARS = listOf("Все" to "") + (2026 downTo 1990).map { it.toString() to it.toString() }
 
-    private val TYPES = listOf("Все" to "", "Фильмы" to "1", "Сериалы" to "2", "OVA" to "3", "Короткометражки" to "224")
+    // Тип на сайте — это раздел, а не параметр запроса: /filmy/ и /serialy/.
+    private val TYPES = listOf("Все" to "", "Фильмы" to "/filmy", "Сериалы" to "/serialy")
 
-    private val SORTS = listOf("По рейтингу" to "rating", "По дате" to "date")
+    private val SORTS = listOf("По дате" to "date", "По рейтингу" to "rating", "По просмотрам" to "views")
 
-    class GenreFilter : AnimeFilter.Select<String>("Жанр", GENRES.map { it.first }.toTypedArray(), 0)
+    open class CheckBoxGroup(
+        name: String,
+        values: List<AnimeFilter.CheckBoxVal>,
+    ) : AnimeFilter.Group<AnimeFilter.CheckBox>(name, values)
+
+    // Сайт принимает несколько жанров через запятую: o.cat=6,10.
+    class GenreFilter : CheckBoxGroup("Жанры", GENRES.map { AnimeFilter.CheckBoxVal(it.first) })
 
     class YearFilter : AnimeFilter.Select<String>("Год", YEARS.map { it.first }.toTypedArray(), 0)
 
@@ -44,26 +50,33 @@ object DomanimeFilters {
     val FILTER_LIST: AnimeFilterList
         get() = AnimeFilterList(GenreFilter(), YearFilter(), TypeFilter(), SortFilter())
 
-    private fun pick(filters: AnimeFilterList, type: Class<*>, values: List<Pair<String, String>>): String {
-        val filter = filters.firstOrNull { type.isInstance(it) } ?: return ""
-        val state = when (filter) {
-            is GenreFilter -> filter.state
-            is YearFilter -> filter.state
-            is TypeFilter -> filter.state
-            is SortFilter -> filter.state
-            else -> 0
-        }
-        return values.getOrNull(state)?.second.orEmpty()
-    }
+    private inline fun <reified R> AnimeFilterList.firstAs(): R? = filterIsInstance<R>().firstOrNull()
 
-    /** Сайт принимает фильтры путём: /f/o.cat=85/r.year=2020/sort=date/. */
+    private fun AnimeFilterList.section(): String =
+        TYPES.getOrNull(firstAs<TypeFilter>()?.state ?: 0)?.second.orEmpty()
+
+    private fun AnimeFilterList.genres(): String = firstAs<GenreFilter>()
+        ?.state
+        ?.filter { it.state }
+        ?.mapNotNull { box -> GENRES.firstOrNull { it.first == box.name }?.second }
+        ?.joinToString(",")
+        .orEmpty()
+
     fun buildPath(filters: AnimeFilterList): String {
+        val section = filters.section()
         val parts = mutableListOf<String>()
-        pick(filters, GenreFilter::class.java, GENRES).takeIf { it.isNotEmpty() }?.let { parts += "o.cat=$it" }
-        pick(filters, YearFilter::class.java, YEARS).takeIf { it.isNotEmpty() }?.let { parts += "r.year=$it" }
-        pick(filters, TypeFilter::class.java, TYPES).takeIf { it.isNotEmpty() }?.let { parts += "o.cat=$it" }
-        pick(filters, SortFilter::class.java, SORTS).takeIf { it.isNotEmpty() }?.let { parts += "sort=$it" }
 
-        return if (parts.isEmpty()) "/" else "/f/" + parts.joinToString("/") + "/"
+        filters.genres().takeIf { it.isNotEmpty() }?.let { parts += "o.cat=$it" }
+        YEARS.getOrNull(filters.firstAs<YearFilter>()?.state ?: 0)
+            ?.second
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { parts += "r.year=$it" }
+        SORTS.getOrNull(filters.firstAs<SortFilter>()?.state ?: 0)
+            ?.second
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { parts += "sort=$it" }
+
+        val suffix = if (parts.isEmpty()) "/f/" else "/f/" + parts.joinToString("/") + "/"
+        return section + suffix
     }
 }

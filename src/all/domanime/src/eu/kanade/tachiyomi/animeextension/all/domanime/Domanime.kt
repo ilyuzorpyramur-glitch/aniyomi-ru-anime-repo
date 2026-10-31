@@ -78,7 +78,16 @@ class Domanime :
         return SAnime.create().apply {
             title = doc.selectFirst("h1")?.text()?.substringBefore(" аниме")?.trim().orEmpty()
                 .ifBlank { doc.title().substringBefore(":").trim() }
-            thumbnail_url = doc.selectFirst("meta[property=og:image]")?.attr("content")
+            // og:image встречается относительным (/uploads/...), тогда картинка
+            // в приложении не грузится — приводим к абсолютному адресу.
+            thumbnail_url = (
+                doc.selectFirst("meta[property=og:image]")?.attr("content")
+                    ?: doc.selectFirst("div.movie-img img")?.attr("src")
+                    ?: doc.selectFirst("img[itemprop=image]")?.attr("src")
+                )
+                ?.trim()
+                ?.toAbsoluteUrl()
+                ?.takeIf { it.startsWith("http") }
             description = doc.selectFirst("meta[property=og:description]")?.attr("content")
                 ?.takeIf { it.isNotBlank() }
                 ?: doc.selectFirst("meta[name=description]")?.attr("content")
@@ -93,7 +102,18 @@ class Domanime :
                 ?.take(10)
                 ?.joinToString(", ")
                 ?.ifBlank { null }
-            status = SAnime.UNKNOWN
+            val statusText = doc.select("ul.inner-page__list > li")
+                .firstOrNull { it.selectFirst("span")?.text()?.startsWith("Статус") == true }
+                ?.text()
+                ?.substringAfter(":", "")
+                ?.lowercase()
+                .orEmpty()
+            status = when {
+                "заверш" in statusText || "вышел" in statusText -> SAnime.COMPLETED
+                "онгоинг" in statusText || "выходит" in statusText || "продолж" in statusText -> SAnime.ONGOING
+                "анонс" in statusText -> SAnime.ONGOING
+                else -> SAnime.UNKNOWN
+            }
         }
     }
 
@@ -102,8 +122,10 @@ class Domanime :
     override fun episodeListRequest(anime: SAnime): Request = GET(baseUrl + anime.url, headers)
 
     override fun episodeListParse(response: Response): List<SEpisode> {
-        val doc = response.parseDocument()
-        val translators = doc.kodikPayload()?.optJSONObject("translators")
+        val html = response.bodyText()
+        val payload = KODIK_REGEX.find(html)?.groupValues?.get(1)
+            ?.let { runCatching { JSONObject(it) }.getOrNull() }
+        val translators = payload?.optJSONObject("translators")
         val translator = translators?.keys()?.asSequence()?.firstOrNull()
 
         if (translator != null) {
@@ -128,7 +150,10 @@ class Domanime :
                 }
             }
 
-            if (episodes.isNotEmpty()) return episodes
+            if (episodes.isNotEmpty()) {
+                // Приложение показывает список сверху вниз: новые серии — первыми.
+                return episodes.sortedByDescending { it.episode_number }
+            }
         }
 
         return listOf(
@@ -275,7 +300,10 @@ class Domanime :
         val doc = response.parseDocument()
         val animes = doc.select("#dle-content div.movie-item")
             .mapNotNull { it.toSAnime() }
+            // Сайт отдаёт один тайтл дважды (разные озвучки/сезоны) —
+            // в приложении это выглядит как дубли.
             .distinctBy { it.url }
+            .distinctBy { it.title.lowercase().trim() }
 
         val current = PAGE_REGEX.find(response.request.url.encodedPath)?.groupValues?.get(1)?.toIntOrNull() ?: 1
         val hasNext = doc.select("#pagination a[href]").any { link ->
@@ -369,5 +397,6 @@ class Domanime :
         private val PAGE_REGEX = Regex("""/page/(\d+)/""")
         private val QUALITY_REGEX = Regex("""(\d{3,4})p""")
         private val URL_PARAMS_REGEX = Regex("""urlParams\s*=\s*'(\{.*?\})'""", RegexOption.DOT_MATCHES_ALL)
+        private val KODIK_REGEX = Regex("""var\s+kodik\s*=\s*(\{.*?\});""", RegexOption.DOT_MATCHES_ALL)
     }
 }
