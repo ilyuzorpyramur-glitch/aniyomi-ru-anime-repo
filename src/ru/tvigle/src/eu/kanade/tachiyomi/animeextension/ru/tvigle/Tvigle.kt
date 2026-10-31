@@ -178,7 +178,7 @@ class Tvigle : AnimeHttpLegacySource() {
         // release_year_end есть только у завершённых сериалов; «есть серии» —
         // не признак онгоинга, из-за него завершённые показывались как выходящие.
         status = when {
-            !releaseYearEnd.isNullOrBlank() -> SAnime.COMPLETED
+            releaseYearEnd != null -> SAnime.COMPLETED
             kind == "series" && videosCount > 0 -> SAnime.ONGOING
             kind == "series" -> SAnime.UNKNOWN
             else -> SAnime.COMPLETED
@@ -206,7 +206,7 @@ class Tvigle : AnimeHttpLegacySource() {
 
     private fun ProductDto.kindType(): String? = when (kind) {
         "series" -> "Сериал"
-        "movie" -> "Фильм"
+        "film", "movie" -> "Фильм"
         else -> null
     }
 

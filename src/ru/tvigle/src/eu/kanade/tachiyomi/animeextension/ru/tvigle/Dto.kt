@@ -29,8 +29,9 @@ class ProductDto(
     // API отдаёт и год, и диапазон («2022-2025»), поэтому строкой.
     @SerialName("release_year") val releaseYear: String? = null,
     // Год окончания есть только у завершённых сериалов — по нему и считаем статус.
-    @SerialName("release_year_end") val releaseYearEnd: String? = null,
-    @SerialName("release_year_start") val releaseYearStart: String? = null,
+    // API отдаёт годы числами; строкой они ломали разбор всего ответа.
+    @SerialName("release_year_end") val releaseYearEnd: Int? = null,
+    @SerialName("release_year_start") val releaseYearStart: Int? = null,
     val categories: List<CategoryDto> = emptyList(),
     @SerialName("age_restrictions") val ageRestrictions: String? = null,
     @SerialName("kinopoisk_rating") val kinopoiskRating: String? = null,
