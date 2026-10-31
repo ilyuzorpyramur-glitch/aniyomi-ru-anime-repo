@@ -183,8 +183,8 @@ class YummyAnime :
     // ============================ Video Links =============================
 
     // Lib 16 drops the episode-level video request/parse pair: videos are produced per
-    // hoster in getVideoList(hoster). Only the hoster/season stubs remain.
-    override fun seasonListParse(response: Response): List<SAnime> = throw UnsupportedOperationException()
+    // hoster in getVideoList(hoster). seasonListParse базовый класс уже закрывает
+    // исключением, поэтому здесь остаётся только заглушка хостера.
     override fun hosterListParse(response: Response): List<Hoster> = throw UnsupportedOperationException()
 
     private fun episodeVideosRequest(episode: SEpisode): Request {
