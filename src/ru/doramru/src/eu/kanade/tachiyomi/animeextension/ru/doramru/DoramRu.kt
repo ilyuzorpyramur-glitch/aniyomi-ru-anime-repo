@@ -275,12 +275,12 @@ class DoramRu :
             .findAll(page)
             .map { it.value.replace("""\/""", "/") }
             .toList()
-        val links = (decoded + plain.mapIndexed { index, url ->
-            Video(url, "Видео " + (index + 1), url, headers = playerHeaders())
-        })
-            .distinctBy { it.videoUrl }
+        val links = decoded.toMutableList()
+        plain.forEachIndexed { index, url ->
+            links += Video(url, "Видео " + (index + 1), url, headers = playerHeaders())
+        }
         Log.e("Amedia", "direct links=" + links.size)
-        links
+        links.distinctBy { it.videoUrl }
     }.getOrElse {
         Log.e("Amedia", "direct error", it)
         emptyList()
