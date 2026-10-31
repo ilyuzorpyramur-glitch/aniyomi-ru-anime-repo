@@ -276,20 +276,26 @@ class AniMaunt :
         videos
     }
 
-    /** Не-Kodik плееры (Alloha и подобные) обычно кладут ссылку прямо в разметку. */
+    /** Не-Kodik плееры обычно кладут ссылки прямо в разметку.
+     *
+     *  Часто это строка вида «[HD (720p)]https://...mp4,[SD]https://...mp4»,
+     *  поэтому берём пары «метка + адрес» и обрезаем адрес по расширению:
+     *  иначе в url попадает «,[SD (480p)]https://...» и видео не играет.
+     */
     private fun directVideos(player: String): List<Video> = runCatching {
         val page = client.newCall(GET(player, playerHeaders())).execute().use { it.bodyString() }
         val decoded = ATOB_REGEX.find(page)?.groupValues?.get(1)?.let(::decodePlaylist).orEmpty()
-        val plain = Regex("""https?://[^"'\s]+\.(?:m3u8|mp4)[^"'\s]*""")
-            .findAll(page)
-            .map { it.value.replace("""\/""", "/") }
-            .toList()
-        val links = decoded.toMutableList()
-        plain.forEachIndexed { index, url ->
-            links += Video(url, "Видео " + (index + 1), url, headers = playerHeaders())
-        }
-        Log.e("Amedia", "direct links=" + links.size)
-        links.distinctBy { it.videoUrl }
+
+        val labeled = LABELED_URL.findAll(page).map { match ->
+            Video(match.groupValues[2], match.groupValues[1].trim(), player, headers = playerHeaders())
+        }.toList()
+
+        val plain = PLAIN_URL.findAll(page).map { match ->
+            Video(match.value, "Видео", player, headers = playerHeaders())
+        }.toList()
+
+        Log.e("Amedia", "direct links=" + (decoded.size + labeled.size + plain.size))
+        (decoded + labeled + plain).distinctBy { it.videoUrl }
     }.getOrElse {
         Log.e("Amedia", "direct error", it)
         emptyList()
@@ -339,6 +345,15 @@ class AniMaunt :
         private const val MAX_SLOTS = 4
         private const val PLAYER_MODE = "iframe"
         // Плеер лежит либо в <iframe src>, либо в data-iframe у кнопки серии.
+        // «[HD (720p)]https://host/video/720/1.mp4» — метка и адрес.
+        private val LABELED_URL = Regex(
+            """\[([^\]\[]{2,24})\]\s*(https?://[^"'\s,\]]+?\.(?:m3u8|mp4))""",
+            RegexOption.IGNORE_CASE,
+        )
+        private val PLAIN_URL = Regex(
+            """https?://[^"'\s,\]]+?\.(?:m3u8|mp4)""",
+            RegexOption.IGNORE_CASE,
+        )
         private val IFRAME_REGEX = Regex(
             """(?:<iframe[^>]*src="|data-iframe=")([^"]+)"""",
             RegexOption.IGNORE_CASE,
