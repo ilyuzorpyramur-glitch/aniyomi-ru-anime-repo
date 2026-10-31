@@ -52,17 +52,17 @@ class AniMaunt : AnimeHttpLegacySource() {
 
     private fun parseAnimeList(response: Response): AnimesPage {
         val doc = Jsoup.parse(response.body!!.string(), response.request.url.toString())
-        val items = doc.select(".th-item, .short-item, article.story")
+        val items = doc.select(".th-item, .short-item, .movie-item, article.story")
         val animes = items.map { element ->
             SAnime.create().apply {
-                val link = element.selectFirst("a[href*='/anime/'], .th-title a, .short-title a")
+                val link = element.selectFirst("a")
                 val img = element.selectFirst("img")
-                title = element.select(".th-title, .short-title, .story-title").text().ifEmpty { img?.attr("alt") ?: "Anime" }
+                title = element.select(".th-title, .short-title, .movie-title, .story-title").text().ifEmpty { img?.attr("alt") ?: "Anime" }
                 url = link?.attr("href")?.substringAfter(baseUrl) ?: ""
                 thumbnail_url = img?.attr("abs:data-src")?.ifEmpty { null } ?: img?.attr("abs:src")
             }
-        }.filter { it.url.isNotEmpty() }
-        val hasNext = doc.select(".pagi-next, .navigation a:contains(Вперед)").isNotEmpty()
+        }.filter { it.url.isNotEmpty() && it.title.isNotEmpty() }
+        val hasNext = doc.select(".pagi-next, .navigation a:contains(Далее), .navigation a:contains(Вперед)").isNotEmpty()
         return AnimesPage(animes, hasNext)
     }
 
@@ -70,14 +70,18 @@ class AniMaunt : AnimeHttpLegacySource() {
     override fun animeDetailsParse(response: Response): SAnime {
         val doc = Jsoup.parse(response.body!!.string(), response.request.url.toString())
         return SAnime.create().apply {
-            title = doc.select("h1, .full-title").text().replace("смотреть онлайн", "", true).trim()
-            thumbnail_url = doc.select(".fposter img, meta[property='og:image']").attr("abs:src").ifEmpty { doc.select("meta[property='og:image']").attr("abs:content") }
-            description = doc.select(".ftext, .full-text, #full-news").text()
+            title = doc.select("h1, .full-title, .short-title").first()?.text()?.replace("смотреть онлайн", "", true)?.trim() ?: "Unknown"
+            thumbnail_url = doc.select(".fposter img, .movie-img img, meta[property='og:image']").attr("abs:src").ifEmpty { doc.select("meta[property='og:image']").attr("content") }
+            description = doc.select(".ftext, .full-text, #full-news, .movie-desc").text()
             genre = doc.select("a[href*='/genre/']").joinToString { it.text() }
-            val statusText = doc.select(".finfo, .full-info").text()
+            val statusText = doc.select(".finfo, .full-info, .movie-info").text()
             status = when {
-                statusText.contains("завершен", true) -> SAnime.COMPLETED
-                statusText.contains("онгоинг", true) -> SAnime.ONGOING
+                statusText.contains("завершен", true) || statusText.contains("вышел", true) -> SAnime.COMPLETED
+                statusText.contains("онгоинг", true) || statusText.contains("выходит", true) -> SAnime.ONGOING
+                else -> SAnime.UNKNOWN
+            }
+        }
+    }Text.contains("онгоинг", true) -> SAnime.ONGOING
                 else -> SAnime.UNKNOWN
             }
             author = doc.select("a[href*='/studio/']").text()
