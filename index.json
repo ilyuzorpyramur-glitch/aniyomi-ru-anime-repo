@@ -583,24 +583,6 @@
     ]
   },
   {
-    "name": "Aniyomi: TechVision M dia",
-    "pkg": "eu.kanade.tachiyomi.animeextension.ru.aniplay",
-    "apk": "aniyomi-ru.aniplay-v14.1.apk",
-    "lang": "ru",
-    "code": 1,
-    "version": "14.1",
-    "nsfw": 0,
-    "sources": [
-      {
-        "name": "TechVision M dia",
-        "lang": "ru",
-        "id": "3564175407113780494",
-        "baseUrl": "https://aniplay.tv",
-        "versionId": 1
-      }
-    ]
-  },
-  {
     "name": "Aniyomi: Tvigle",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.tvigle",
     "apk": "aniyomi-ru.tvigle-v14.6.apk",
