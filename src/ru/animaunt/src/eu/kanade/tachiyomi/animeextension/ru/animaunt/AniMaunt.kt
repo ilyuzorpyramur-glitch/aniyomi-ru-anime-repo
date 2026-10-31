@@ -291,6 +291,16 @@ class AniMaunt :
         .set("Origin", "https://kodikplayer.com")
         .build()
 
+    /** Origin обязан совпадать с хостом плеера: иначе 403 и пустая страница. */
+    private fun headersFor(url: String): Headers {
+        val origin = runCatching { java.net.URI(url).let { "${it.scheme}://${it.host}" } }.getOrNull()
+        return headers.newBuilder()
+            .set("User-Agent", USER_AGENT)
+            .set("Referer", "$baseUrl/")
+            .apply { if (origin != null) set("Origin", origin) }
+            .build()
+    }
+
     private fun attrsOf(tag: String): Map<String, String> = Regex("""([a-z-]+)="([^"]*)"""").findAll(tag)
         .associate { it.groupValues[1] to it.groupValues[2] }
 
@@ -316,14 +326,14 @@ class AniMaunt :
      *  иначе в url попадает «,[SD (480p)]https://...» и видео не играет.
      */
     private fun directVideos(player: String): List<Video> = runCatching {
-        val page = client.newCall(GET(player, playerHeaders())).execute().use { it.bodyString() }
+        val page = client.newCall(GET(player, headersFor(player))).execute().use { it.bodyString() }
         var found = mediaOf(page, player)
         if (found.isEmpty()) {
             // Плеер-обёртка: внутри ещё один iframe (openni, alloha и подобные).
             val nested = IFRAME_REGEX.find(page)?.groupValues?.get(1)
             if (nested != null) {
                 val next = absoluteUrl(nested)
-                val inner = client.newCall(GET(next, playerHeaders())).execute().use { it.bodyString() }
+                val inner = client.newCall(GET(next, headersFor(next))).execute().use { it.bodyString() }
                 found = mediaOf(inner, next)
             }
         }
@@ -339,16 +349,24 @@ class AniMaunt :
         val decoded = ATOB_REGEX.find(page)?.groupValues?.get(1)?.let(::decodePlaylist).orEmpty()
 
         val labeled = LABELED_URL.findAll(page).map { match ->
-            Video(match.groupValues[2], match.groupValues[1].trim(), referer, headers = playerHeaders())
+            Video(match.groupValues[2], match.groupValues[1].trim(), referer, headers = headersFor(referer))
         }.toList()
 
-        val fromJson = JSON_MEDIA_URL.findAll(page).map { match ->
-            val url = match.groupValues[1].replace("""\/""", "/")
-            Video(url, "Видео", referer, headers = playerHeaders())
+        // playerjs кладёт ВСЕ качества одной строкой: file":"[Mobile (320p)]url,[SD (480p)]url"
+        val fromJson = JSON_FILE_VALUE.findAll(page).flatMap { field ->
+            val text = field.groupValues[1].replace("""\/""", "/")
+            val pairs = LABELED_URL.findAll(text).map { match ->
+                Video(match.groupValues[2], match.groupValues[1].trim(), referer, headers = headersFor(referer))
+            }.toList()
+            pairs.ifEmpty {
+                PLAIN_URL.findAll(text).map { match ->
+                    Video(match.value, "Видео", referer, headers = headersFor(referer))
+                }.toList()
+            }
         }.toList()
 
         val plain = PLAIN_URL.findAll(page).map { match ->
-            Video(match.value, "Видео", referer, headers = playerHeaders())
+            Video(match.value, "Видео", referer, headers = headersFor(referer))
         }.toList()
 
         return (decoded + labeled + fromJson + plain).distinctBy { it.videoUrl }
@@ -432,6 +450,8 @@ class AniMaunt :
 
         // Плеер лежит либо в <iframe src>, либо в data-iframe у кнопки серии.
         // «[HD (720p)]https://host/video/720/1.mp4» — метка и адрес.
+        private val JSON_FILE_VALUE = Regex("""file"\s*:\s*"([^"]+)"""")
+
         private val JSON_MEDIA_URL = Regex(
             """(?:file|src|url)\s*[:=]\s*["']([^"']+?\.(?:m3u8|mp4)[^"']*)""",
             RegexOption.IGNORE_CASE,
