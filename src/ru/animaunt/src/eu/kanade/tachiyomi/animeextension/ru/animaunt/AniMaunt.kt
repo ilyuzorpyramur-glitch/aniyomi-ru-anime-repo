@@ -127,5 +127,4 @@ class AniMaunt : AnimeHttpLegacySource() {
     }
 
     override fun videoUrlParse(response: Response): String = ""
-
 }
