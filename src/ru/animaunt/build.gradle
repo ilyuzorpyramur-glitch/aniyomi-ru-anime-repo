@@ -1,0 +1,12 @@
+ext {
+    extName = 'AniMaunt'
+    extClass = '.AniMaunt'
+    extVersionCode = 2
+    isNsfw = false
+}
+
+apply plugin: "kei.plugins.extension.legacy"
+
+dependencies {
+    implementation(project(':lib:playlistutils'))
+}
