@@ -48,11 +48,29 @@ class KodikExtractor(
             return emptyList()
         }
 
-        val translations = parseTranslations(page)
-        Log.e(TAG, "page=" + page.length + " translations=" + translations.size)
-        if (translations.isEmpty()) return emptyList()
-
         val episodeAttrs = episodeAttrs(page, episode)
+        val parsed = parseTranslations(page)
+        Log.e(TAG, "page=" + page.length + " translations=" + parsed.size)
+
+        // Часть сайтов отдаёт ссылку сразу на серию: списка озвучек в разметке нет,
+        // а ссылки запрашиваются по id/hash самой серии. Тогда собираем одну
+        // «озвучку» из атрибутов серии, иначе плеер молча отдаёт пустой список.
+        val translations = parsed.ifEmpty {
+            val attrs = episodeAttrs ?: return emptyList()
+            val seriesId = attrs["data-id"].orEmpty()
+            val seriesHash = attrs["data-hash"].orEmpty()
+            if (seriesId.isBlank() || seriesHash.isBlank()) return emptyList()
+            listOf(
+                Translation(
+                    id = seriesId,
+                    title = "Озвучка",
+                    mediaType = "seria",
+                    mediaId = seriesId,
+                    mediaHash = seriesHash,
+                    kind = "voice",
+                ),
+            )
+        }
         val ignoreSubs = preferences.getBoolean(PREF_IGNORE_SUBS, true)
 
         val wanted = translations
