@@ -295,6 +295,24 @@
     ]
   },
   {
+    "name": "Aniyomi: Doram Ru",
+    "pkg": "eu.kanade.tachiyomi.animeextension.ru.doramru",
+    "apk": "aniyomi-ru.doramru-v14.1.apk",
+    "lang": "ru",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "Doram Ru",
+        "lang": "ru",
+        "id": "592639239812492755",
+        "baseUrl": "https://doram-ru.org",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: DoramaLend",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.doramalend",
     "apk": "aniyomi-ru.doramalend-v14.3.apk",
@@ -578,6 +596,24 @@
         "lang": "ru",
         "id": "7615827653801207218",
         "baseUrl": "https://senu.pro",
+        "versionId": 1
+      }
+    ]
+  },
+  {
+    "name": "Aniyomi: Shiza Project",
+    "pkg": "eu.kanade.tachiyomi.animeextension.ru.shiza",
+    "apk": "aniyomi-ru.shiza-v14.1.apk",
+    "lang": "ru",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "Shiza Project",
+        "lang": "ru",
+        "id": "8550618800466778341",
+        "baseUrl": "https://shiza-project.com",
         "versionId": 1
       }
     ]
