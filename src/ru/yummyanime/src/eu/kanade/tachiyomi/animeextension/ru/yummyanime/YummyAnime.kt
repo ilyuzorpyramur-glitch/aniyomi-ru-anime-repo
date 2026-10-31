@@ -71,16 +71,11 @@ class YummyAnime :
 
     // ============================== Popular ===============================
 
-    override fun popularAnimeRequest(page: Int): Request {
-        val offset = (page - 1) * 20
-        return GET("$apiUrl/anime/catalog?limit=20&offset=$offset", headers)
-    }
+    override fun getFilterList(): AnimeFilterList = YummyAnimeFilters.FILTER_LIST
 
-    override fun popularAnimeParse(response: Response): AnimesPage {
-        val data = response.parseAs<YummyResponse<YummyCatalogDto>>().response
-        val animes = data?.data?.map { it.toSAnime() } ?: emptyList()
-        return AnimesPage(animes, animes.size == 20)
-    }
+    override fun popularAnimeRequest(page: Int): Request = GET(catalogUrl(page, "", AnimeFilterList()), headers)
+
+    override fun popularAnimeParse(response: Response): AnimesPage = parseCatalog(response)
 
     // =============================== Latest ===============================
 
@@ -94,17 +89,43 @@ class YummyAnime :
 
     // =============================== Search ===============================
 
-    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
-        val url = "$apiUrl/search".toHttpUrl().newBuilder()
-            .addQueryParameter("q", query)
-            .build()
-        return GET(url, headers)
+    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request =
+        GET(catalogUrl(page, query, filters), headers)
+
+    override fun searchAnimeParse(response: Response): AnimesPage = parseCatalog(response)
+
+    /**
+     * Каталог и поиск — один endpoint `/anime`: он принимает `q` и все фильтры
+     * (genres, types, from_year/to_year, season, status, min_age, ep_from/ep_to, sort)
+     * и листается через limit/offset. Прежний `/anime/catalog` отдавал фиксированную
+     * первую страницу и не принимал ни фильтров, ни поиска.
+     */
+    private fun catalogUrl(page: Int, query: String, filters: AnimeFilterList): String {
+        val params = YummyAnimeFilters.getSearchParameters(filters)
+        val builder = "$apiUrl/anime".toHttpUrl().newBuilder()
+            .addQueryParameter("limit", PAGE_SIZE.toString())
+            .addQueryParameter("offset", ((page - 1) * PAGE_SIZE).toString())
+
+        if (query.isNotBlank()) builder.addQueryParameter("q", query)
+        if (params.genres.isNotEmpty()) builder.addQueryParameter("genres", params.genres.joinToString(","))
+        if (params.types.isNotEmpty()) builder.addQueryParameter("types", params.types.joinToString(","))
+        params.status.takeIf { it.isNotEmpty() }?.let { builder.addQueryParameter("status", it) }
+        params.season.takeIf { it.isNotEmpty() }?.let { builder.addQueryParameter("season", it) }
+        params.minAge.takeIf { it.isNotEmpty() }?.let { builder.addQueryParameter("min_age", it) }
+        params.yearFrom.takeIf { it.isNotEmpty() }?.let { builder.addQueryParameter("from_year", it) }
+        params.yearTo.takeIf { it.isNotEmpty() }?.let { builder.addQueryParameter("to_year", it) }
+        params.episodesFrom.takeIf { it.isNotEmpty() }?.let { builder.addQueryParameter("ep_from", it) }
+        params.episodesTo.takeIf { it.isNotEmpty() }?.let { builder.addQueryParameter("ep_to", it) }
+        params.sort.takeIf { it.isNotEmpty() }?.let { builder.addQueryParameter("sort", it) }
+        if (params.ascending) builder.addQueryParameter("sort_forward", "1")
+
+        return builder.build().toString()
     }
 
-    override fun searchAnimeParse(response: Response): AnimesPage {
+    private fun parseCatalog(response: Response): AnimesPage {
         val data = response.parseAs<YummyResponse<List<YummyAnimeDto>>>().response
         val animes = data?.map { it.toSAnime() } ?: emptyList()
-        return AnimesPage(animes, false)
+        return AnimesPage(animes, animes.size >= PAGE_SIZE)
     }
 
     // =========================== Anime Details ============================
@@ -662,6 +683,7 @@ class YummyAnime :
 
     companion object {
         private const val TAG = "YummyAnime"
+        private const val PAGE_SIZE = 20
         private const val AKSOR_API = "https://player.aksor.tv/api"
         private const val CVH_API = "https://plapi.cdnvideohub.com/api/v1"
         private const val CVH_PUBLISHER_ID = 745
