@@ -161,17 +161,10 @@ class Tvigle : AnimeHttpLegacySource() {
     override fun animeDetailsParse(response: Response): SAnime = throw UnsupportedOperationException("Not used.")
 
     override suspend fun getAnimeDetails(anime: SAnime): SAnime {
-        val response = client
+        val product = client
             .newCall(GET("$apiUrl/product${anime.url}", apiHeaders()))
             .awaitSuccess()
-        // Диагностика: видно, что реально пришло, если разбор снова упадёт.
-        val probe = response.peekBody(400_000).string()
-        android.util.Log.e(
-            "TvigleDbg",
-            "url=${response.request.url} len=${probe.length} " +
-                "at1600=${probe.substring(1600, minOf(1720, probe.length))}",
-        )
-        val product = response.parseAs<ProductDto>()
+            .parseAs<ProductDto>()
 
         return product.toSAnime()
     }
@@ -299,22 +292,38 @@ class Tvigle : AnimeHttpLegacySource() {
 
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
         val parts = episode.url.trim('/').split('/')
-        // Облачный плеер ищет видео по id серии, а не по content_id: на content_id
-        // он отдаёт «Ограничение по территории» или 404 даже для доступного видео.
-        val videoId = parts.getOrNull(1)?.toLongOrNull()?.takeIf { it > 0 }
-            ?: throw Exception("Не удалось определить видео")
+        // Облачный плеер ищет видео по id серии; content_id — запасной ключ,
+        // он выручает часть старых записей, где id уже переехал.
+        val keys = listOfNotNull(
+            parts.getOrNull(1)?.toLongOrNull()?.takeIf { it > 0 },
+            parts.getOrNull(2)?.toLongOrNull()?.takeIf { it > 0 },
+        ).distinct()
+        if (keys.isEmpty()) throw Exception("Не удалось определить видео")
 
-        val item = runCatching {
-            client
-                .newCall(GET("$CLOUD_URL/api/play/video/$videoId/?partner_id=$PARTNER_ID", cloudHeaders()))
-                .awaitSuccess()
-                .parseAs<CloudResponseDto>()
-        }.getOrNull()
-            ?.playlist
-            ?.items
-            ?.firstOrNull()
+        var item: CloudItemDto? = null
+        var lastError: String? = null
+        for (key in keys) {
+            val candidate = runCatching {
+                client
+                    .newCall(GET("$CLOUD_URL/api/play/video/$key/?partner_id=$PARTNER_ID", cloudHeaders()))
+                    .awaitSuccess()
+                    .parseAs<CloudResponseDto>()
+            }.getOrNull()
+                ?.playlist
+                ?.items
+                ?.firstOrNull()
+                ?: continue
 
-        item?.errorMessage?.takeIf { it.isNotBlank() }?.let { throw Exception(it.stripHtml()) }
+            candidate.errorMessage?.takeIf { it.isNotBlank() }?.let { lastError = it.stripHtml() }
+            if (candidate.videos != null) {
+                item = candidate
+                break
+            }
+        }
+
+        if (item == null) {
+            throw Exception(lastError ?: "Серия недоступна на стороне сайта")
+        }
 
         val videos = item?.videos
         // Контент Wink/START плеер cloud.tvigle.ru не отдаёт файлами: там HLS с
