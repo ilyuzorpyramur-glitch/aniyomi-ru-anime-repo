@@ -172,7 +172,7 @@ class Amedia :
         if (player.isBlank()) return emptyList()
 
         val page = runCatching {
-            client.newCall(GET(player, headers.newBuilder().set("Referer", "$baseUrl/").build())).execute()
+            client.newCall(GET(player, playerHeaders())).execute()
                 .use { it.bodyString() }
         }.getOrNull() ?: return emptyList()
 
@@ -198,6 +198,13 @@ class Amedia :
         val root = runCatching { JSONObject(body) }.getOrNull() ?: return ""
         return root.optJSONObject("data")?.optString("src").orEmpty()
     }
+
+    /** Kodik отдаёт разметку только браузерному User-Agent. */
+    private fun playerHeaders(): Headers = headers.newBuilder()
+        .set("User-Agent", USER_AGENT)
+        .set("Referer", "$baseUrl/")
+        .set("Origin", "https://kodikplayer.com")
+        .build()
 
     private fun attrsOf(tag: String): Map<String, String> = Regex("""([a-z-]+)="([^"]*)"""").findAll(tag)
         .associate { it.groupValues[1] to it.groupValues[2] }
