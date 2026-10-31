@@ -601,24 +601,6 @@
     ]
   },
   {
-    "name": "Aniyomi: Shiza Project",
-    "pkg": "eu.kanade.tachiyomi.animeextension.ru.shiza",
-    "apk": "aniyomi-ru.shiza-v14.1.apk",
-    "lang": "ru",
-    "code": 1,
-    "version": "14.1",
-    "nsfw": 0,
-    "sources": [
-      {
-        "name": "Shiza Project",
-        "lang": "ru",
-        "id": "8550618800466778341",
-        "baseUrl": "https://shiza-project.com",
-        "versionId": 1
-      }
-    ]
-  },
-  {
     "name": "Aniyomi: Tvigle",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.tvigle",
     "apk": "aniyomi-ru.tvigle-v14.6.apk",
