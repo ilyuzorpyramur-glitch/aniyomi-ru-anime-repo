@@ -2,10 +2,10 @@
   {
     "name": "Aniyomi: Amedia",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.amedia",
-    "apk": "aniyomi-ru.amedia-v14.2.apk",
+    "apk": "aniyomi-ru.amedia-v14.3.apk",
     "lang": "ru",
-    "code": 2,
-    "version": "14.2",
+    "code": 3,
+    "version": "14.3",
     "nsfw": 0,
     "sources": [
       {
@@ -56,10 +56,10 @@
   {
     "name": "Aniyomi: AniLibria",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.anilibria",
-    "apk": "aniyomi-ru.anilibria-v14.6.apk",
+    "apk": "aniyomi-ru.anilibria-v14.7.apk",
     "lang": "ru",
-    "code": 6,
-    "version": "14.6",
+    "code": 7,
+    "version": "14.7",
     "nsfw": 0,
     "sources": [
       {
@@ -144,6 +144,24 @@
     ]
   },
   {
+    "name": "Aniyomi: Anifap",
+    "pkg": "eu.kanade.tachiyomi.animeextension.ru.anifap",
+    "apk": "aniyomi-ru.anifap-v14.1.apk",
+    "lang": "ru",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 1,
+    "sources": [
+      {
+        "name": "Anifap",
+        "lang": "ru",
+        "id": "4739517464565752631",
+        "baseUrl": "https://anifap.com",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: Animakima",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.animakima",
     "apk": "aniyomi-ru.animakima-v14.5.apk",
@@ -193,6 +211,24 @@
         "lang": "ru",
         "id": "7515118130006638233",
         "baseUrl": "https://animesss.tv",
+        "versionId": 1
+      }
+    ]
+  },
+  {
+    "name": "Aniyomi: Animefox",
+    "pkg": "eu.kanade.tachiyomi.animeextension.ru.animefox",
+    "apk": "aniyomi-ru.animefox-v14.1.apk",
+    "lang": "ru",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "Animefox",
+        "lang": "ru",
+        "id": "4458188330431015195",
+        "baseUrl": "https://www.animefox.org",
         "versionId": 1
       }
     ]
@@ -416,6 +452,24 @@
         "lang": "ru",
         "id": "2810967597003075487",
         "baseUrl": "https://hdrezka.me",
+        "versionId": 1
+      }
+    ]
+  },
+  {
+    "name": "Aniyomi: Hentasis1",
+    "pkg": "eu.kanade.tachiyomi.animeextension.ru.hentasis1",
+    "apk": "aniyomi-ru.hentasis1-v14.1.apk",
+    "lang": "ru",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 1,
+    "sources": [
+      {
+        "name": "Hentasis1",
+        "lang": "ru",
+        "id": "3306324540401856471",
+        "baseUrl": "https://hentasis1.top",
         "versionId": 1
       }
     ]
