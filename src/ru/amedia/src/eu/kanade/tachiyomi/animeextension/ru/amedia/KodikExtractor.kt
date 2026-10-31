@@ -4,6 +4,7 @@ import android.content.SharedPreferences
 import android.net.Uri
 import android.util.Base64
 import android.util.Log
+import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.awaitSuccess
@@ -73,15 +74,22 @@ class KodikExtractor(
         }
         val ignoreSubs = preferences.getBoolean(PREF_IGNORE_SUBS, true)
 
-        val wanted = translations
+        // Озвучки не отбрасываем: все они уходят в звуковые дорожки, чтобы в плеере
+        // можно было переключиться. Настройка лишь поднимает выбранную наверх.
+        val usable = translations
             .filter { !ignoreSubs || !it.kind.contains("sub", ignoreCase = true) }
-            .filter { matchesPreference(it.title) }
-            .ifEmpty { translations }
+            .distinctBy { it.title + "@" + it.mediaId }
+        val orderedTranslations = (usable.filter { matchesPreference(it.title) } + usable)
+            .distinctBy { it.title + "@" + it.mediaId }
 
         val qualities = preferredQualities()
-        val videos = mutableListOf<Video>()
 
-        for (translation in wanted) {
+        // Качество и озвучка живут в разных местах плеера: качество — в списке
+        // качеств, озвучка — в звуковых дорожках. Поэтому собираем «качество → озвучки»,
+        // а не плоский список «озвучка + качество».
+        val byQuality = linkedMapOf<String, MutableList<Pair<String, String>>>()
+
+        for (translation in orderedTranslations) {
             val isSerial = translation.mediaType != "video" && episodeAttrs != null
             val id = if (isSerial) episodeAttrs?.get("data-id").orEmpty() else translation.mediaId
             val hash = if (isSerial) episodeAttrs?.get("data-hash").orEmpty() else translation.mediaHash
@@ -99,12 +107,20 @@ class KodikExtractor(
                 val src = links.optJSONArray(quality)?.optJSONObject(0)?.optString("src").orEmpty()
                 if (src.isBlank()) continue
                 val url = decode(src) ?: continue
-                val label = translation.title + " " + quality + "p"
-                videos += Video(url, label, url, headers = kodikHeaders())
+                byQuality.getOrPut(quality) { mutableListOf() } += translation.title to url
             }
         }
 
-        Log.e(TAG, "videos=" + videos.size)
+        val videos = byQuality.map { (quality, dubs) ->
+            Video(
+                videoUrl = dubs.first().second,
+                videoTitle = quality + "p",
+                headers = kodikHeaders(),
+                audioTracks = dubs.map { (name, link) -> Track(link, name) },
+            )
+        }
+
+        Log.e(TAG, "videos=" + videos.size + " dubs=" + byQuality.values.sumOf { it.size })
         return videos.distinctBy { it.videoUrl }
     }
 
