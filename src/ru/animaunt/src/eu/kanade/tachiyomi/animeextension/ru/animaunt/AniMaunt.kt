@@ -383,11 +383,11 @@ class AniMaunt :
             "Приключения" to "/anime/priklyucheniya/",
             "Психология" to "/anime/psihologiya/",
             "Романтика" to "/anime/romantika/",
-            "Сверхъестественное" to "/anime/sverhestestvennoe/"
+            "Сверхъестественное" to "/anime/sverhestestvennoe/",
         )
 
         private val GENRES = listOf(
-            "Все" to ""
+            "Все" to "",
         )
 
         private val SECTIONS_FILTER = eu.kanade.tachiyomi.animesource.model.AnimeFilter.Select<String>(
@@ -414,6 +414,7 @@ class AniMaunt :
         private const val RELAY_URL = "/engine/ajax/controller.php?mod=player&id={id}&slot={slot}"
         private const val MAX_SLOTS = 4
         private const val PLAYER_MODE = "iframe"
+
         // Плеер лежит либо в <iframe src>, либо в data-iframe у кнопки серии.
         // «[HD (720p)]https://host/video/720/1.mp4» — метка и адрес.
         private val LABELED_URL = Regex(
