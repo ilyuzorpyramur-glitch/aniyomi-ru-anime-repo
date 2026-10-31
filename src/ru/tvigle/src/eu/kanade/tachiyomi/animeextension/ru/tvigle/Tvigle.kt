@@ -173,8 +173,12 @@ class Tvigle : AnimeHttpLegacySource() {
         url = "/$slug/"
         title = name
         thumbnail_url = poster ?: thumbnail
-        genre = (genres + countries).filter { it.isNotBlank() }.distinct().joinToString(", ")
+        // Страны — не жанры: раньше они попадали в «Жанры» и мешали фильтру.
+        genre = genres.filter { it.isNotBlank() }.distinct().joinToString(", ")
+        // release_year_end есть только у завершённых сериалов; «есть серии» —
+        // не признак онгоинга, из-за него завершённые показывались как выходящие.
         status = when {
+            !releaseYearEnd.isNullOrBlank() -> SAnime.COMPLETED
             kind == "series" && videosCount > 0 -> SAnime.ONGOING
             kind == "series" -> SAnime.UNKNOWN
             else -> SAnime.COMPLETED
@@ -187,6 +191,10 @@ class Tvigle : AnimeHttpLegacySource() {
                     appendLine(it)
                     appendLine()
                 }
+            (kindType() ?: kind)?.takeIf { it.isNotBlank() }?.let { appendLine("Тип: $it") }
+            categories.map { it.name }.filter { it.isNotBlank() }.distinct()
+                .takeIf { it.isNotEmpty() }
+                ?.let { appendLine("Категории: ${it.joinToString(", ")}") }
             releaseYear?.let { appendLine("Год выхода: $it") }
             countries.takeIf { it.isNotEmpty() }?.let { appendLine("Страна: ${it.joinToString(", ")}") }
             ageRestrictions?.takeIf { it.isNotBlank() }?.let { appendLine("Возраст: $it") }
@@ -194,6 +202,12 @@ class Tvigle : AnimeHttpLegacySource() {
             imdbRating?.toRating()?.let { appendLine("IMDB: $it") }
             if (isPaid) appendLine("Требуется подписка Tvigle")
         }.trim()
+    }
+
+    private fun ProductDto.kindType(): String? = when (kind) {
+        "series" -> "Сериал"
+        "movie" -> "Фильм"
+        else -> null
     }
 
     /** API отдаёт рейтинг строкой с тремя знаками ("8.224") — округляем. */
@@ -278,12 +292,14 @@ class Tvigle : AnimeHttpLegacySource() {
 
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
         val parts = episode.url.trim('/').split('/')
-        val contentId = parts.getOrNull(2)?.toLongOrNull()?.takeIf { it > 0 }
+        // Облачный плеер ищет видео по id серии, а не по content_id: на content_id
+        // он отдаёт «Ограничение по территории» или 404 даже для доступного видео.
+        val videoId = parts.getOrNull(1)?.toLongOrNull()?.takeIf { it > 0 }
             ?: throw Exception("Не удалось определить видео")
 
         val item = runCatching {
             client
-                .newCall(GET("$CLOUD_URL/api/play/video/$contentId/?partner_id=$PARTNER_ID", cloudHeaders()))
+                .newCall(GET("$CLOUD_URL/api/play/video/$videoId/?partner_id=$PARTNER_ID", cloudHeaders()))
                 .awaitSuccess()
                 .parseAs<CloudResponseDto>()
         }.getOrNull()
@@ -299,7 +315,7 @@ class Tvigle : AnimeHttpLegacySource() {
         // Tadami считает Video.videoUrl медиапотоком и падает с
         // «unrecognized file format», поэтому честно сообщаем причину.
         if (videos == null) {
-            throw Exception("Видео защищено правообладателем (Wink/START) и не воспроизводится в приложении")
+            throw Exception("Плеер не отдал ссылки для этой серии")
         }
 
         val subtitles = item.subtitlesUrl

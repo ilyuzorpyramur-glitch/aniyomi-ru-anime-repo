@@ -28,12 +28,21 @@ class ProductDto(
     val countries: List<String> = emptyList(),
     // API отдаёт и год, и диапазон («2022-2025»), поэтому строкой.
     @SerialName("release_year") val releaseYear: String? = null,
+    // Год окончания есть только у завершённых сериалов — по нему и считаем статус.
+    @SerialName("release_year_end") val releaseYearEnd: String? = null,
+    @SerialName("release_year_start") val releaseYearStart: String? = null,
+    val categories: List<CategoryDto> = emptyList(),
     @SerialName("age_restrictions") val ageRestrictions: String? = null,
     @SerialName("kinopoisk_rating") val kinopoiskRating: String? = null,
     @SerialName("imdb_rating") val imdbRating: String? = null,
     @SerialName("is_paid") val isPaid: Boolean = false,
     @SerialName("videos_count") val videosCount: Int = 0,
     val kind: String? = null,
+)
+
+@Serializable
+class CategoryDto(
+    val name: String = "",
 )
 
 @Serializable
