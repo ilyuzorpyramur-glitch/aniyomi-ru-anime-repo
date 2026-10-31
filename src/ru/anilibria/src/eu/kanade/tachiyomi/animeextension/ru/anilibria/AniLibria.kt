@@ -7,6 +7,7 @@ import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
+import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import keiyoushi.utils.AnimeHttpLegacySource
@@ -133,7 +134,17 @@ class AniLibria :
             }
         }
 
-        return videos.sortedByDescending { it.videoTitle.quality() == preferredQuality }
+        // HLS подписывает дорожку языком («rus»), а пользователю нужно название
+        // озвучки: у AniLibria она одна, поэтому подставляем её имя.
+        return videos
+            .map { video ->
+                if (video.audioTracks.isEmpty()) {
+                    video
+                } else {
+                    video.copy(audioTracks = video.audioTracks.map { Track(it.url, "AniLibria") })
+                }
+            }
+            .sortedByDescending { it.videoTitle.quality() == preferredQuality }
     }
 
     // ============================== Settings ==============================

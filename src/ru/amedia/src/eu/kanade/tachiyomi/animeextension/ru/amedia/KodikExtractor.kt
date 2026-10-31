@@ -112,11 +112,13 @@ class KodikExtractor(
         }
 
         val videos = byQuality.map { (quality, dubs) ->
+            // Первая озвучка — это сам поток: плеер покажет его звук как дорожку #1.
+            // Остальные уходят в audioTracks, иначе в списке будет дубль.
             Video(
                 videoUrl = dubs.first().second,
                 videoTitle = quality + "p",
                 headers = kodikHeaders(),
-                audioTracks = dubs.map { (name, link) -> Track(link, name) },
+                audioTracks = dubs.drop(1).map { (name, link) -> Track(link, name) },
             )
         }
 
