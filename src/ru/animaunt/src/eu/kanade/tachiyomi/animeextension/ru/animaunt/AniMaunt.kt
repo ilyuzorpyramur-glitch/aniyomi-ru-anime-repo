@@ -72,9 +72,17 @@ class AniMaunt :
     override fun latestUpdatesParse(response: Response): AnimesPage = parseList(response)
 
     override fun searchAnimeRequest(page: Int, query: String, filters: eu.kanade.tachiyomi.animesource.model.AnimeFilterList): Request {
-        val encoded = java.net.URLEncoder.encode(query, "UTF-8")
-        val url = "$baseUrl" + SEARCH_PATH.replace("{query}", encoded)
-        return GET(url, headers)
+        val url = if (page > 1) "$baseUrl/index.php?do=search&subaction=search&search_start=$page" else "$baseUrl/index.php?do=search"
+        val formBody = okhttp3.FormBody.Builder(java.nio.charset.Charset.forName("windows-1251"))
+            .add("do", "search")
+            .add("subaction", "search")
+            .add("story", query)
+            .build()
+        return okhttp3.Request.Builder()
+            .url(url)
+            .headers(headers)
+            .post(formBody)
+            .build()
     }
 
     override fun searchAnimeParse(response: Response): AnimesPage = parseList(response)
