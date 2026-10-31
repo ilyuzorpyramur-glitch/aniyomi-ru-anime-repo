@@ -20,10 +20,10 @@
   {
     "name": "Aniyomi: AniJoy",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.anijoy",
-    "apk": "aniyomi-ru.anijoy-v14.1.apk",
+    "apk": "aniyomi-ru.anijoy-v14.7.apk",
     "lang": "ru",
-    "code": 1,
-    "version": "14.1",
+    "code": 7,
+    "version": "14.7",
     "nsfw": 0,
     "sources": [
       {
