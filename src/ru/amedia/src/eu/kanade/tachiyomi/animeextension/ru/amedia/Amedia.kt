@@ -160,6 +160,7 @@ class Amedia :
 
     override fun episodeListRequest(anime: SAnime): Request {
         val id = currentAnimeId.ifBlank { relayId(anime.url) }
+        Log.e("Amedia", "relay id=" + id + " anime=" + anime.url)
         return GET(baseUrl + RELAY_URL.replace("{id}", id), headers)
     }
 
@@ -221,9 +222,29 @@ class Amedia :
     override suspend fun getVideoList(episode: SEpisode): List<Video> = withContext(Dispatchers.IO) {
         val number = Regex("""#e=(\d+)""").find(episode.url)?.groupValues?.get(1)?.toFloatOrNull()
             ?: episode.episode_number
-        val videos = kodik.videos(episode.url.substringBefore("#"), 1, number.toInt())
+        val player = episode.url.substringBefore("#")
+        val videos = if (player.contains("kodik", ignoreCase = true)) {
+            kodik.videos(player, 1, number.toInt())
+        } else {
+            directVideos(player)
+        }
         if (videos.isEmpty()) throw Exception("Плеер не вернул видео")
         videos
+    }
+
+    /** Не-Kodik плееры (Alloha и подобные) обычно кладут ссылку прямо в разметку. */
+    private fun directVideos(player: String): List<Video> = runCatching {
+        val page = client.newCall(GET(player, playerHeaders())).execute().use { it.bodyString() }
+        val links = Regex("""https?://[^"'\s]+\.(?:m3u8|mp4)[^"'\s]*""")
+            .findAll(page)
+            .map { it.value.replace("\/", "/") }
+            .distinct()
+            .toList()
+        Log.e("Amedia", "direct links=" + links.size)
+        links.mapIndexed { index, url -> Video(url, "Видео " + (index + 1), url, headers = playerHeaders()) }
+    }.getOrElse {
+        Log.e("Amedia", "direct error", it)
+        emptyList()
     }
 
     // ============================== Настройки =============================
