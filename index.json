@@ -1,5 +1,23 @@
 [
   {
+    "name": "Aniyomi: Amedia",
+    "pkg": "eu.kanade.tachiyomi.animeextension.ru.amedia",
+    "apk": "aniyomi-ru.amedia-v14.1.apk",
+    "lang": "ru",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "Amedia",
+        "lang": "ru",
+        "id": "5732408402806384861",
+        "baseUrl": "https://amedia.club",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: AniDub",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.anidub",
     "apk": "aniyomi-ru.anidub-v14.16.apk",
@@ -560,24 +578,6 @@
         "lang": "ru",
         "id": "7615827653801207218",
         "baseUrl": "https://senu.pro",
-        "versionId": 1
-      }
-    ]
-  },
-  {
-    "name": "Aniyomi: Smotretanime",
-    "pkg": "eu.kanade.tachiyomi.animeextension.ru.smotretanime",
-    "apk": "aniyomi-ru.smotretanime-v14.1.apk",
-    "lang": "ru",
-    "code": 1,
-    "version": "14.1",
-    "nsfw": 1,
-    "sources": [
-      {
-        "name": "Smotretanime",
-        "lang": "ru",
-        "id": "788156401420541995",
-        "baseUrl": "https://smotret-anime.app",
         "versionId": 1
       }
     ]
