@@ -199,10 +199,8 @@ class Amedia :
         return root.optJSONObject("data")?.optString("src").orEmpty()
     }
 
-    private fun attrsOf(tag: String): Map<String, String> {
-        return Regex("""([a-z-]+)="([^"]*)"""").findAll(tag)
-            .associate { it.groupValues[1] to it.groupValues[2] }
-    }
+    private fun attrsOf(tag: String): Map<String, String> = Regex("""([a-z-]+)="([^"]*)"""").findAll(tag)
+        .associate { it.groupValues[1] to it.groupValues[2] }
 
     // =============================== Видео ================================
 
