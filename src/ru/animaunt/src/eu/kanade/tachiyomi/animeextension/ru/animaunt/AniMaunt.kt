@@ -90,7 +90,7 @@ class AniMaunt :
                 val body = match.groupValues[2]
                 SAnime.create().apply {
                     url = path
-                    title = cleanTitle(textOf(body)).ifBlank { altOf(body) }
+                    title = titleOfCard(body)
                     thumbnail_url = imageOf(body)?.let(::absoluteUrl)
                     initialized = false
                 }
@@ -104,6 +104,27 @@ class AniMaunt :
     }
 
     private fun pageOf(url: String): Int = Regex("""(?:page/|page=|/)(\d+)""").find(url)?.groupValues?.get(1)?.toIntOrNull() ?: 1
+
+    /** Заголовок карточки: alt картинки, вложенный .title, и только потом текст.
+     *
+     *  У DLE в тело ссылки попадают счётчики («14736 просмотров 28 9 12+»),
+     *  поэтому текст берём последним и чистим от цифр статистики.
+     */
+    private fun titleOfCard(body: String): String {
+        val alt = altOf(body).trim()
+        if (alt.isNotEmpty()) return cleanTitle(alt)
+        val nested = Regex(
+            """<(?:h1|h2|h3|div|span)[^>]*class="[^"]*(?:title|name)[^"]*"[^>]*>(.*?)</""",
+            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+        ).find(body)?.groupValues?.get(1)
+        if (nested != null) {
+            val clean = cleanTitle(textOf(nested))
+            if (clean.isNotBlank()) return clean
+        }
+        return cleanTitle(textOf(body))
+            .replace(Regex("""\s*\d+\s*просмотров.*""", RegexOption.IGNORE_CASE), "")
+            .trim()
+    }
 
     private fun textOf(fragment: String): String = Jsoup.parse(fragment).text()
 
