@@ -403,6 +403,24 @@
     ]
   },
   {
+    "name": "Aniyomi: JutSu",
+    "pkg": "eu.kanade.tachiyomi.animeextension.ru.jutsu",
+    "apk": "aniyomi-ru.jutsu-v14.1.apk",
+    "lang": "ru",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "JutSu",
+        "lang": "ru",
+        "id": "1054674958185432139",
+        "baseUrl": "https://jut-su.works",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: Jutsu TV",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.jutsutv",
     "apk": "aniyomi-ru.jutsutv-v14.2.apk",
