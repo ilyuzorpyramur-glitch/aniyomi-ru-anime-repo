@@ -16,7 +16,7 @@ import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
-import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
+import keiyoushi.utils.AnimeHttpHosterSource
 import eu.kanade.tachiyomi.network.GET
 import keiyoushi.utils.bodyString
 import keiyoushi.utils.get
@@ -33,7 +33,7 @@ import okhttp3.Request
 import okhttp3.Response
 
 class YummyAnime :
-    AnimeHttpSource(),
+    AnimeHttpHosterSource(),
     ConfigurableAnimeSource {
 
     override val name = "YummyAnime"
