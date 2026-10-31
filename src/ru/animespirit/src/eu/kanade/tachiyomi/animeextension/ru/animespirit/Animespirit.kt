@@ -13,8 +13,6 @@ import okhttp3.Headers
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.Jsoup
-import org.jsoup.nodes.Document
-import org.jsoup.nodes.Element
 
 class Animespirit : AnimeHttpLegacySource() {
 
@@ -32,15 +30,13 @@ class Animespirit : AnimeHttpLegacySource() {
 
     // =============================== Популярное (Главная) ===============================
 
-    override fun popularAnimeRequest(page: Int): Request =
-        GET(if (page == 1) baseUrl else "$baseUrl/page/$page/", headers)
+    override fun popularAnimeRequest(page: Int): Request = GET(if (page == 1) baseUrl else "$baseUrl/page/$page/", headers)
 
     override fun popularAnimeParse(response: Response): AnimesPage = parseAnimeList(response)
 
     // =============================== Последние обновления ===============================
 
-    override fun latestUpdatesRequest(page: Int): Request =
-        GET(if (page == 1) "$baseUrl/anime/" else "$baseUrl/anime/page/$page/", headers)
+    override fun latestUpdatesRequest(page: Int): Request = GET(if (page == 1) "$baseUrl/anime/" else "$baseUrl/anime/page/$page/", headers)
 
     override fun latestUpdatesParse(response: Response): AnimesPage = parseAnimeList(response)
 
@@ -48,7 +44,7 @@ class Animespirit : AnimeHttpLegacySource() {
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         if (query.length < 3) throw Exception("Поиск требует минимум 3 символа")
-        
+
         val formBody = FormBody.Builder()
             .add("do", "search")
             .add("subaction", "search")
@@ -68,7 +64,7 @@ class Animespirit : AnimeHttpLegacySource() {
     private fun parseAnimeList(response: Response): AnimesPage {
         val document = Jsoup.parse(response.body!!.string(), response.request.url.toString())
         val items = document.select("div.custom-poster, div.short-story")
-        
+
         val animes = items.map { element ->
             SAnime.create().apply {
                 val link = element.selectFirst("a")
@@ -91,7 +87,33 @@ class Animespirit : AnimeHttpLegacySource() {
             title = document.select("h1").text().trim()
             thumbnail_url = info.select("div.poster img").attr("abs:src")
             description = info.select("div.full-text, div.description").text().trim()
-            genre = info.select("a[href*=/genre/]").joinToString { it.text() }
+            genre = info.select("div.full-info a[href*='/genre/']").joinToString { it.text() }
+            status = SAnime.UNKNOWN
+            author = "Animespirit"
+        }
+    }
+
+    override fun episodeListParse(response: Response): List<SEpisode> {
+        val document = response.asJsoup()
+        val episodes = mutableListOf<SEpisode>()
+        
+        // Базовая логика для DLE плееров
+        val playerElement = document.selectFirst("div.video-player, #video-player")
+        
+        episodes.add(SEpisode.create().apply {
+            name = "Смотреть онлайн"
+            episode_number = 1f
+            url = response.request.url.toString()
+            date_upload = System.currentTimeMillis()
+        })
+        
+        return episodes.reversed()
+    }
+
+    override fun videoListParse(response: Response): List<Video> = emptyList()
+
+    override fun List<Video>.sort(): List<Video> = this
+}ect("a[href*=/genre/]").joinToString { it.text() }
             status = parseStatus(info.text())
         }
     }
