@@ -127,9 +127,9 @@ class AniLibria :
             playlistUtils.extractFromHls(
                 playlistUrl = url,
                 referer = "$baseUrl/",
-                videoNameGen = { "AniLibria - $quality" },
+                videoNameGen = { "$quality" },
             ).ifEmpty {
-                listOf(Video(url, "AniLibria - $quality", url, headers = headers))
+                listOf(Video(url, "$quality", url, headers = headers))
             }
         }
 
