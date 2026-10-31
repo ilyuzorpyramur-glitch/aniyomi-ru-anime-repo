@@ -33,13 +33,12 @@ object DomanimeFilters {
 
     private val SORTS = listOf("По дате" to "date", "По рейтингу" to "rating", "По просмотрам" to "views")
 
-    open class CheckBoxGroup(
-        name: String,
-        values: List<AnimeFilter.CheckBoxVal>,
-    ) : AnimeFilter.Group<AnimeFilter.CheckBox>(name, values)
+    class CheckBoxVal(name: String, state: Boolean = false) : AnimeFilter.CheckBox(name, state)
+
+    open class CheckBoxGroup(name: String, values: List<CheckBoxVal>) : AnimeFilter.Group<AnimeFilter.CheckBox>(name, values)
 
     // Сайт принимает несколько жанров через запятую: o.cat=6,10.
-    class GenreFilter : CheckBoxGroup("Жанры", GENRES.map { AnimeFilter.CheckBoxVal(it.first) })
+    class GenreFilter : CheckBoxGroup("Жанры", GENRES.map { CheckBoxVal(it.first) })
 
     class YearFilter : AnimeFilter.Select<String>("Год", YEARS.map { it.first }.toTypedArray(), 0)
 
