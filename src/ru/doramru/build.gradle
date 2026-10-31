@@ -1,0 +1,12 @@
+ext {
+    extName = 'Doram Ru'
+    extClass = '.DoramRu'
+    extVersionCode = 1
+    isNsfw = false
+}
+
+apply plugin: "kei.plugins.extension.legacy"
+
+dependencies {
+    implementation(project(':lib:playlistutils'))
+}

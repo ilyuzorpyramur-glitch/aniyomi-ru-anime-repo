@@ -29,6 +29,8 @@ SCALE = MASTER / 192
 
 # ext dir -> (monogram, accent rgb, dark fill rgb)
 ICONS = {
+    "doramru": ("DR", (98, 138, 218), (22, 35, 59)),
+    "shiza": ("SP", (98, 218, 200), (22, 59, 54)),
     "amedia": ("AC", (218, 98, 168), (59, 22, 44)),
     "borutobase": ("BB", (98, 218, 104), (22, 59, 24)),
     "animeheaven": ("SA", (98, 218, 102), (22, 59, 24)),
