@@ -160,9 +160,10 @@ class Amedia :
 
     override fun episodeListRequest(anime: SAnime): Request {
         val id = currentAnimeId.ifBlank { relayId(anime.url) }
-        Log.e("Amedia", "relay id=" + id + " anime=" + anime.url)
-        return GET(baseUrl + RELAY_URL.replace("{id}", id), headers)
+        return GET(relayUrl(id, 0), headers)
     }
+
+    private fun relayUrl(id: String, slot: Int): String = baseUrl + RELAY_URL.replace("{id}", id).replace("{slot}", slot.toString())
 
     private fun relayId(path: String): String = runCatching {
         val html = client.newCall(GET(baseUrl + path, headers)).execute().use { it.bodyString() }
@@ -170,12 +171,31 @@ class Amedia :
     }.getOrDefault("")
 
     override fun episodeListParse(response: Response): List<SEpisode> {
-        val player = playerFromRelay(response)
-        Log.e("Amedia", "player=" + player)
-        if (player.isBlank()) return emptyList()
+        // Сайт выдаёт разным сессиям разные плееры и раскладывает их по слотам,
+        // поэтому перебираем слоты и берём Kodik, если он вообще предложен.
+        val players = mutableListOf<String>()
+        for (slot in 0 until MAX_SLOTS) {
+            val src = playerAt(currentAnimeId, slot) ?: continue
+            players += src
+            if (src.contains("kodik", ignoreCase = true)) break
+        }
+
+        val kodikPlayer = players.firstOrNull { it.contains("kodik", ignoreCase = true) }
+        if (kodikPlayer == null) {
+            // Другой плеер (Alloha и подобные): отдаём одну серию, видео достанет getVideoList.
+            val other = players.firstOrNull() ?: return emptyList()
+            Log.e("Amedia", "не-Kodik плеер: " + other.take(80))
+            return listOf(
+                SEpisode.create().apply {
+                    url = other
+                    name = "Серия 1"
+                    episode_number = 1f
+                },
+            )
+        }
 
         val page = runCatching {
-            client.newCall(GET(player, playerHeaders())).execute()
+            client.newCall(GET(kodikPlayer, playerHeaders())).execute()
                 .use { it.bodyString() }
         }.onFailure { Log.e("Amedia", "player page error", it) }.getOrNull() ?: return emptyList()
 
@@ -186,7 +206,7 @@ class Amedia :
             val number = attrs["value"]?.toFloatOrNull() ?: return@mapNotNull null
             val title = attrs["data-title"].orEmpty()
             SEpisode.create().apply {
-                url = "$player#e=" + number.toEpisodeNumber()
+                url = "$kodikPlayer#e=" + number.toEpisodeNumber()
                 name = title.ifBlank { "Серия " + number.toEpisodeNumber() }
                 episode_number = number
             }
@@ -198,13 +218,13 @@ class Amedia :
 
     private fun Float.toEpisodeNumber(): String = if (this % 1f == 0f) toInt().toString() else toString()
 
-    private fun playerFromRelay(response: Response): String {
-        val body = runCatching { response.bodyString() }
-            .onFailure { Log.e("Amedia", "relay body error", it) }
-            .getOrNull() ?: return ""
-        Log.e("Amedia", "relay=" + body.take(160))
-        val root = runCatching { JSONObject(body) }.getOrNull() ?: return ""
-        return root.optJSONObject("data")?.optString("src").orEmpty()
+    private fun playerAt(id: String, slot: Int): String? {
+        val body = runCatching {
+            client.newCall(GET(relayUrl(id, slot), headers)).execute().use { it.bodyString() }
+        }.getOrNull() ?: return null
+        return runCatching { JSONObject(body).optJSONObject("data")?.optString("src") }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() }
     }
 
     /** Kodik отдаёт разметку только браузерному User-Agent. */
@@ -276,7 +296,8 @@ class Amedia :
         private const val DESC_SELECTOR = "div"
         private const val GENRE_SELECTOR = "a[href*='/genre/']"
 
-        private const val RELAY_URL = "/engine/ajax/controller.php?mod=player&id={id}&slot=0"
+        private const val RELAY_URL = "/engine/ajax/controller.php?mod=player&id={id}&slot={slot}"
+        private const val MAX_SLOTS = 4
 
         private val ANCHOR_REGEX = Regex(
             """<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>""",
