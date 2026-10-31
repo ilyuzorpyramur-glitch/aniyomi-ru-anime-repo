@@ -52,8 +52,7 @@ object DomanimeFilters {
 
     private inline fun <reified R> AnimeFilterList.firstAs(): R? = filterIsInstance<R>().firstOrNull()
 
-    private fun AnimeFilterList.section(): String =
-        TYPES.getOrNull(firstAs<TypeFilter>()?.state ?: 0)?.second.orEmpty()
+    private fun AnimeFilterList.section(): String = TYPES.getOrNull(firstAs<TypeFilter>()?.state ?: 0)?.second.orEmpty()
 
     private fun AnimeFilterList.genres(): String = firstAs<GenreFilter>()
         ?.state
