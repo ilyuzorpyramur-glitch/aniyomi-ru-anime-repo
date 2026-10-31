@@ -255,7 +255,11 @@ class AniJoy :
                 episode_number = number
             }
         }
-        return episodes.sortedBy { it.episode_number }
+        // В разметке плеера список серий продублирован (десктоп и мобильный),
+        // поэтому одинаковые номера схлопываем.
+        return episodes
+            .distinctBy { it.episode_number }
+            .sortedBy { it.episode_number }
     }
 
     private fun kodikHeaders(): Headers = headers.newBuilder()
