@@ -218,9 +218,12 @@ class YummyAnime :
         val playerUrl = video.iframeUrl?.fixProtocol()?.takeIf { it.isNotBlank() }
             ?: return@mapNotNull null
         val dubbing = video.data?.dubbing?.takeIf { it.isNotBlank() } ?: "Озвучка"
+        // videoList по умолчанию — неизменяемый emptyList(); приложение дополняет
+        // его своими видео и падает с "read-only collection". Явный null это чинит.
         Hoster(
             hosterUrl = playerUrl,
             hosterName = "$dubbing (${playerShortName(player)})",
+            videoList = null,
             internalData = playerUrl,
         )
     }
@@ -321,13 +324,15 @@ class YummyAnime :
             "$CVH_API/player/sv/playlist?pub=$CVH_PUBLISHER_ID&aggr=$CVH_AGGREGATOR&id=$titleId",
             cvhHeaders,
         ).parseAs<CvhPlaylist>().items
-            .filter { episode == null || it.episode == episode }
+            // У одноминутных/фильмовых плейлистов episode = null: такой элемент
+            // относится к единственному видео и подходит любой серии.
+            .filter { episode == null || it.episode == null || it.episode == episode }
             .distinctBy { it.vkId }
         val (subtitled, voiced) = items.partition { it.voiceType.equals("Субтитры", ignoreCase = true) }
 
         fun hoster(name: String, item: CvhItem): Hoster {
             val videoUrl = "$CVH_API/player/sv/video/${item.vkId}"
-            return Hoster(hosterUrl = videoUrl, hosterName = "$name (CVH)", internalData = videoUrl)
+            return Hoster(hosterUrl = videoUrl, hosterName = "$name (CVH)", videoList = null, internalData = videoUrl)
         }
 
         val dubbings = wrappers.mapNotNull { (entry, wrapper) ->
@@ -335,9 +340,16 @@ class YummyAnime :
             val item = voiced.firstOrNull { it.voiceStudio.equals(code, ignoreCase = true) }
                 ?: voiced.firstOrNull()
                 ?: return@mapNotNull null
-            hoster(entry.data?.dubbing?.takeIf { it.isNotBlank() } ?: code.ifBlank { "Озвучка" }, item)
+            // Название из обёртки точнее: voiceType бывает "Неизвестный".
+            val name = entry.data?.dubbing?.takeIf { it.isNotBlank() }
+                ?: code.takeIf { it.isNotBlank() }
+                ?: "Озвучка"
+            hoster(name, item)
         }
-        return dubbings + subtitled.map { hoster(it.voiceType ?: "Субтитры", it) }
+        return dubbings + subtitled.map {
+            val type = it.voiceType?.takeIf { t -> t.isNotBlank() && !t.equals("Неизвестный", true) }
+            hoster(type ?: "Субтитры", it)
+        }
     }
 
     /** Progressive mp4 renditions from okcdn; the links are bound to the requesting IP. */
