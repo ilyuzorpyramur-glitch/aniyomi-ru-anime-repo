@@ -128,5 +128,4 @@ class AniMaunt : AnimeHttpLegacySource() {
 
     override fun videoUrlParse(response: Response): String = ""
 
-    override fun List<Video>.sort(): List<Video> = this
 }
