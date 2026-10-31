@@ -16,8 +16,8 @@ import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
-import keiyoushi.utils.AnimeHttpHosterSource
 import eu.kanade.tachiyomi.network.GET
+import keiyoushi.utils.AnimeHttpHosterSource
 import keiyoushi.utils.bodyString
 import keiyoushi.utils.get
 import keiyoushi.utils.getPreferencesLazy
