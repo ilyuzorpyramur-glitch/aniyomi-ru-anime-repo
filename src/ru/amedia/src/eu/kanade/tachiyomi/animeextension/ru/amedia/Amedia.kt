@@ -84,7 +84,7 @@ class Amedia :
         val animes = ANCHOR_REGEX.findAll(html)
             .mapNotNull { match ->
                 val href = match.groupValues[1]
-                if (!href.contains(linkFilter.pattern)) return@mapNotNull null
+                if (!linkFilter.containsMatchIn(href)) return@mapNotNull null
                 val path = href.substringAfter(baseUrl, href)
                 val body = match.groupValues[2]
                 SAnime.create().apply {
