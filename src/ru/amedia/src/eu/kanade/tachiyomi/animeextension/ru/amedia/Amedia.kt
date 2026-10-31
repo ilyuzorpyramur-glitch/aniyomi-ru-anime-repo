@@ -237,7 +237,7 @@ class Amedia :
         val page = client.newCall(GET(player, playerHeaders())).execute().use { it.bodyString() }
         val links = Regex("""https?://[^"'\s]+\.(?:m3u8|mp4)[^"'\s]*""")
             .findAll(page)
-            .map { it.value.replace("\/", "/") }
+            .map { it.value.replace("""\/""", "/") }
             .distinct()
             .toList()
         Log.e("Amedia", "direct links=" + links.size)
