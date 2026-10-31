@@ -72,17 +72,9 @@ class AniMaunt :
     override fun latestUpdatesParse(response: Response): AnimesPage = parseList(response)
 
     override fun searchAnimeRequest(page: Int, query: String, filters: eu.kanade.tachiyomi.animesource.model.AnimeFilterList): Request {
-        val url = if (page > 1) "$baseUrl/index.php?do=search&subaction=search&search_start=$page" else "$baseUrl/index.php?do=search"
-        val formBody = okhttp3.FormBody.Builder(java.nio.charset.Charset.forName("windows-1251"))
-            .add("do", "search")
-            .add("subaction", "search")
-            .add("story", query)
-            .build()
-        return okhttp3.Request.Builder()
-            .url(url)
-            .headers(headers)
-            .post(formBody)
-            .build()
+        val encoded = java.net.URLEncoder.encode(query, "UTF-8")
+        val url = "$baseUrl" + SEARCH_PATH.replace("{query}", encoded)
+        return GET(url, headers)
     }
 
     override fun searchAnimeParse(response: Response): AnimesPage = parseList(response)
@@ -148,6 +140,15 @@ class AniMaunt :
                 ?.let(::absoluteUrl)
             description = metaOf(doc, "og:description")
                 ?: doc.selectFirst(DESC_SELECTOR)?.text()?.takeIf { it.length > 80 }
+            // Своего поля «статус» у DLE нет, но есть «Эпизоды: 5 из 12».
+            // Это факт со страницы: вышло меньше — онгоинг, все — завершён.
+            val pageText = doc.text()
+            val episodes = Regex("""Эпизоды:\s*(\d+)\s*из\s*(\d+)""").find(pageText)
+            status = when {
+                episodes == null -> SAnime.UNKNOWN
+                episodes.groupValues[1] == episodes.groupValues[2] -> SAnime.COMPLETED
+                else -> SAnime.ONGOING
+            }
             genre = doc.select(GENRE_SELECTOR).map { it.text().trim() }
                 .filter { it.isNotEmpty() && it.length < 24 }
                 .distinct()
@@ -337,7 +338,6 @@ class AniMaunt :
         private const val RELAY_URL = "/engine/ajax/controller.php?mod=player&id={id}&slot={slot}"
         private const val MAX_SLOTS = 4
         private const val PLAYER_MODE = "iframe"
-
         // Плеер лежит либо в <iframe src>, либо в data-iframe у кнопки серии.
         private val IFRAME_REGEX = Regex(
             """(?:<iframe[^>]*src="|data-iframe=")([^"]+)"""",
