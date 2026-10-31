@@ -72,24 +72,6 @@
     ]
   },
   {
-    "name": "Aniyomi: AniMaunt",
-    "pkg": "eu.kanade.tachiyomi.animeextension.ru.animaunt",
-    "apk": "aniyomi-ru.animaunt-v14.5.apk",
-    "lang": "ru",
-    "code": 5,
-    "version": "14.5",
-    "nsfw": 0,
-    "sources": [
-      {
-        "name": "AniMaunt",
-        "lang": "ru",
-        "id": "7705388956691099844",
-        "baseUrl": "https://animaunt.org",
-        "versionId": 1
-      }
-    ]
-  },
-  {
     "name": "Aniyomi: AniMedia",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.animedia",
     "apk": "aniyomi-ru.animedia-v14.4.apk",
