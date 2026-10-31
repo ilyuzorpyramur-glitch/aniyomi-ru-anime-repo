@@ -51,7 +51,8 @@ class AniMaunt : AnimeHttpLegacySource(), ConfigurableAnimeSource {
                 val anchor = element.selectFirst("a.th-in")
                 url = anchor?.attr("href")?.substringAfter(baseUrl) ?: ""
                 title = element.select(".th-title").text()
-                thumbnail_url = baseUrl + element.select("img").attr("src")
+                val img = element.selectFirst("img")?.attr("data-src") ?: element.selectFirst("img")?.attr("src")
+                thumbnail_url = if (img?.startsWith("http") == true) img else baseUrl + img
             }
         }
         val hasNextPage = document.select(".pagi-nav a:contains(Далее)").isNotEmpty()
@@ -90,11 +91,22 @@ class AniMaunt : AnimeHttpLegacySource(), ConfigurableAnimeSource {
     override fun animeDetailsParse(response: Response): SAnime {
         val document = Jsoup.parse(response.body!!.string())
         return SAnime.create().apply {
-            title = document.select("h1").text()
-            thumbnail_url = baseUrl + document.select(".fposter img").attr("src")
-            description = document.select(".ftext.full-text").text()
-            genre = document.select(".finfo li:contains(Жанр) a").joinToString { it.text() }
-            status = parseStatus(document.select(".finfo li:contains(Статус)").text())
+            val doc = document
+            title = doc.select("h1").text().ifEmpty { doc.select(".fhead h1").text() }
+            val img = doc.selectFirst(".fposter img")?.attr("src")
+            thumbnail_url = if (img?.startsWith("http") == true) img else baseUrl + img
+            description = doc.select(".ftext.full-text").text()
+            genre = doc.select(".finfo li:contains(Жанр) a").joinToString { it.text() }
+            status = parseStatus(doc.select(".finfo li:contains(Статус)").text())
+        }
+    }
+
+    private fun parseStatus(status: String?): Int = when {
+        status == null -> SAnime.UNKNOWN
+        status.contains("вышел", true) -> SAnime.COMPLETED
+        status.contains("онгоинг", true) -> SAnime.ONGOING
+        else -> SAnime.UNKNOWN
+    }ns(Статус)").text())
             author = document.select(".finfo li:contains(Студия) a").text()
         }
     }
