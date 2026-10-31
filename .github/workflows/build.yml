@@ -71,9 +71,26 @@ jobs:
           ls -l apk
 
       - name: Inspect sources
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          INSPECTOR_LINK="$(curl -s "https://api.github.com/repos/komikku-app/aniyomi-extensions-inspector/releases/latest" | jq -r '.assets[0].browser_download_url')"
-          curl -L "$INSPECTOR_LINK" -o ./Inspector.jar
+          # Анонимный api.github.com упирается в лимит на общих раннерах:
+          # тогда .assets[0] равен null и curl падает на «Could not resolve host: null».
+          INSPECTOR_LINK=""
+          for attempt in 1 2 3 4; do
+            INSPECTOR_LINK="$(gh api repos/komikku-app/aniyomi-extensions-inspector/releases/latest \
+              --jq '.assets[0].browser_download_url' 2>/dev/null || true)"
+            if [ -n "$INSPECTOR_LINK" ] && [ "$INSPECTOR_LINK" != "null" ]; then
+              break
+            fi
+            echo "инспектор: попытка $attempt не удалась, пауза"
+            sleep 10
+          done
+          if [ -z "$INSPECTOR_LINK" ] || [ "$INSPECTOR_LINK" = "null" ]; then
+            echo "::error::инспектор недоступен — индекс с непроверенными источниками не публикуем"
+            exit 1
+          fi
+          curl -fsSL "$INSPECTOR_LINK" -o ./Inspector.jar
           java -jar ./Inspector.jar "apk" "output.json" "tmp"
           cat output.json
 
