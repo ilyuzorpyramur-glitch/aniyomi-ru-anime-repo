@@ -353,7 +353,7 @@ class AniJoy :
         Genre("Видеоигры", "videoigry"),
     )
 
-    private class GenreFilter :
+    private inner class GenreFilter :
         AnimeFilter.Group<Genre>(
             "Жанры",
             genreList(),
