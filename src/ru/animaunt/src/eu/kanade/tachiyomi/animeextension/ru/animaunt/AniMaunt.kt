@@ -329,6 +329,7 @@ class AniMaunt :
         private const val RELAY_URL = "/engine/ajax/controller.php?mod=player&id={id}&slot={slot}"
         private const val MAX_SLOTS = 4
         private const val PLAYER_MODE = "iframe"
+
         // Плеер лежит либо в <iframe src>, либо в data-iframe у кнопки серии.
         private val IFRAME_REGEX = Regex(
             """(?:<iframe[^>]*src="|data-iframe=")([^"]+)"""",
