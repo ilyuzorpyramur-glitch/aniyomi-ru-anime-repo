@@ -360,34 +360,34 @@ class AniMaunt :
         private const val LATEST_PATH = "/anime/"
 
         private val SECTIONS = listOf(
-        "Апокалипсис" to "/anime/apokalipsis/",
-        "Боевик" to "/anime/boevik/",
-        "Боевые искусства" to "/anime/boevye-iskusstva/",
-        "Вампиры" to "/anime/vampiry/",
-        "Война" to "/anime/vojna/",
-        "Гарем" to "/anime/garem/",
-        "Детектив" to "/anime/detektiv/",
-        "Детское" to "/anime/detskoe/",
-        "Драма" to "/anime/drama/",
-        "Игры" to "/anime/igry/",
-        "Исторический" to "/anime/istoricheskij/",
-        "Киберпанк" to "/anime/kiberpank/",
-        "Комедия" to "/anime/komediya/",
-        "Космос" to "/anime/kosmos/",
-        "Магия" to "/anime/magia/",
-        "Меха" to "/anime/meha/",
-        "Мистика" to "/anime/mistika/",
-        "Музыка" to "/anime/muzyka/",
-        "Пародия" to "/anime/parodiya/",
-        "Повседневность" to "/anime/povsednevnost/",
-        "Приключения" to "/anime/priklyucheniya/",
-        "Психология" to "/anime/psihologiya/",
-        "Романтика" to "/anime/romantika/",
-        "Сверхъестественное" to "/anime/sverhestestvennoe/"
+            "Апокалипсис" to "/anime/apokalipsis/",
+            "Боевик" to "/anime/boevik/",
+            "Боевые искусства" to "/anime/boevye-iskusstva/",
+            "Вампиры" to "/anime/vampiry/",
+            "Война" to "/anime/vojna/",
+            "Гарем" to "/anime/garem/",
+            "Детектив" to "/anime/detektiv/",
+            "Детское" to "/anime/detskoe/",
+            "Драма" to "/anime/drama/",
+            "Игры" to "/anime/igry/",
+            "Исторический" to "/anime/istoricheskij/",
+            "Киберпанк" to "/anime/kiberpank/",
+            "Комедия" to "/anime/komediya/",
+            "Космос" to "/anime/kosmos/",
+            "Магия" to "/anime/magia/",
+            "Меха" to "/anime/meha/",
+            "Мистика" to "/anime/mistika/",
+            "Музыка" to "/anime/muzyka/",
+            "Пародия" to "/anime/parodiya/",
+            "Повседневность" to "/anime/povsednevnost/",
+            "Приключения" to "/anime/priklyucheniya/",
+            "Психология" to "/anime/psihologiya/",
+            "Романтика" to "/anime/romantika/",
+            "Сверхъестественное" to "/anime/sverhestestvennoe/"
         )
 
         private val GENRES = listOf(
-        "Все" to ""
+            "Все" to ""
         )
 
         private val SECTIONS_FILTER = eu.kanade.tachiyomi.animesource.model.AnimeFilter.Select<String>(
