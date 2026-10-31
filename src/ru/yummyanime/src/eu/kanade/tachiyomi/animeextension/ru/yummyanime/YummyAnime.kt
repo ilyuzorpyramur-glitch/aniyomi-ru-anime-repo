@@ -89,8 +89,7 @@ class YummyAnime :
 
     // =============================== Search ===============================
 
-    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request =
-        GET(catalogUrl(page, query, filters), headers)
+    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request = GET(catalogUrl(page, query, filters), headers)
 
     override fun searchAnimeParse(response: Response): AnimesPage = parseCatalog(response)
 
