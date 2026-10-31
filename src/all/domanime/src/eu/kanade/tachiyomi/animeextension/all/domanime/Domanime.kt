@@ -102,17 +102,18 @@ class Domanime :
                 ?.take(10)
                 ?.joinToString(", ")
                 ?.ifBlank { null }
-            val statusText = doc.select("ul.inner-page__list > li")
-                .firstOrNull { it.selectFirst("span")?.text()?.startsWith("Статус") == true }
+            // Отдельного поля «Статус» на сайте нет, поэтому выводим его из года:
+            // вышедшее в прошлые годы считаем завершённым.
+            val year = doc.select("ul.inner-page__list > li")
+                .firstOrNull { it.selectFirst("span")?.text()?.startsWith("Год") == true }
                 ?.text()
                 ?.substringAfter(":", "")
-                ?.lowercase()
-                .orEmpty()
+                ?.filter { it.isDigit() }
+                ?.toIntOrNull()
             status = when {
-                "заверш" in statusText || "вышел" in statusText -> SAnime.COMPLETED
-                "онгоинг" in statusText || "выходит" in statusText || "продолж" in statusText -> SAnime.ONGOING
-                "анонс" in statusText -> SAnime.ONGOING
-                else -> SAnime.UNKNOWN
+                year == null -> SAnime.UNKNOWN
+                year < java.time.LocalDate.now().year -> SAnime.COMPLETED
+                else -> SAnime.ONGOING
             }
         }
     }
