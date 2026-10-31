@@ -29,6 +29,7 @@ SCALE = MASTER / 192
 
 # ext dir -> (monogram, accent rgb, dark fill rgb)
 ICONS = {
+    "animestars": ("ANI", (120, 170, 235), (18, 24, 38)),
     "aniplay": ("ANI", (120, 170, 235), (18, 24, 38)),
     "animespirit": ("ANI", (120, 170, 235), (18, 24, 38)),
     "anijoy": ("ANI", (120, 170, 235), (18, 24, 38)),
