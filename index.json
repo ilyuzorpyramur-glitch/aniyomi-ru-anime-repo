@@ -279,10 +279,10 @@
   {
     "name": "Aniyomi: DomAnime",
     "pkg": "eu.kanade.tachiyomi.animeextension.all.domanime",
-    "apk": "aniyomi-all.domanime-v14.14.apk",
+    "apk": "aniyomi-all.domanime-v14.15.apk",
     "lang": "all",
-    "code": 14,
-    "version": "14.14",
+    "code": 15,
+    "version": "14.15",
     "nsfw": 0,
     "sources": [
       {
