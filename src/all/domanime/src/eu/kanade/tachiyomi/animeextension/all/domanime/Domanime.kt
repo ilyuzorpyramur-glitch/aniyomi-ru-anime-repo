@@ -130,8 +130,22 @@ class Domanime :
         val translator = translators?.keys()?.asSequence()?.firstOrNull()
 
         if (translator != null) {
+            val translatorNode = translators.optJSONObject(translator)
+            // Фильм: у перевода сразу лежит ссылка на плеер, без сезонов.
+            val movieLink = translatorNode?.optString("link").orEmpty()
+            if (movieLink.isNotBlank() && translatorNode?.opt("seasons") == null) {
+                return listOf(
+                    SEpisode.create().apply {
+                        url = "kodik|$translator|${movieLink.toAbsoluteUrl()}|0"
+                        episode_number = 1f
+                        name = "Фильм"
+                        scanlator = translator
+                    },
+                )
+            }
+
             // seasons приходит и массивом, и объектом с ключами "1", "2", ...
-            val seasons = translators.optJSONObject(translator)?.opt("seasons").toSeasonList()
+            val seasons = translatorNode?.opt("seasons").toSeasonList()
             val episodes = mutableListOf<SEpisode>()
             var number = 0
 
@@ -184,6 +198,9 @@ class Domanime :
     private suspend fun kodikVideos(translation: String, seasonUrl: String, number: String): List<Video> {
         if (seasonUrl.isEmpty()) return emptyList()
 
+        // Фильм: плеер открывается сразу, серию искать не нужно.
+        if (seasonUrl.contains("/video/")) return movieVideos(translation, seasonUrl)
+
         val seasonPage = client.newCall(GET(seasonUrl, headers)).awaitSuccess().bodyText()
         val option = Jsoup.parse(seasonPage).select(".serial-series-box option")
             .firstOrNull { it.attr("value").toIntOrNull() == number.toIntOrNull() }
@@ -191,9 +208,25 @@ class Domanime :
 
         val id = option.attr("data-id").takeIf { it.isNotBlank() } ?: return emptyList()
         val hash = option.attr("data-hash").takeIf { it.isNotBlank() } ?: return emptyList()
-        val playerUrl = "https://kodikplayer.com/seria/$id/$hash/720p"
-        val playerPage = client.newCall(GET(playerUrl, headers)).awaitSuccess().bodyText()
+        return kodikLinks(translation, "https://kodikplayer.com/seria/$id/$hash/720p", "seria", id, hash)
+    }
 
+    /** Фильм: id и hash лежат прямо в ссылке /video/<id>/<hash>/720p. */
+    private suspend fun movieVideos(translation: String, link: String): List<Video> {
+        val parts = link.substringAfter("/video/").split("/")
+        val id = parts.getOrNull(0)?.takeIf { it.isNotBlank() } ?: return emptyList()
+        val hash = parts.getOrNull(1)?.takeIf { it.isNotBlank() } ?: return emptyList()
+        return kodikLinks(translation, link, "video", id, hash)
+    }
+
+    private suspend fun kodikLinks(
+        translation: String,
+        playerUrl: String,
+        kind: String,
+        id: String,
+        hash: String,
+    ): List<Video> {
+        val playerPage = client.newCall(GET(playerUrl, headers)).awaitSuccess().bodyText()
         val params = URL_PARAMS_REGEX.find(playerPage)?.groupValues?.get(1)
             ?.let { runCatching { JSONObject(it) }.getOrNull() }
             ?: return emptyList()
@@ -209,7 +242,7 @@ class Domanime :
             // FormBody кодирует повторно — сначала раскодируем сами.
             .add("ref", URLDecoder.decode(params.optString("ref"), "UTF-8"))
             .add("ref_sign", params.optString("ref_sign"))
-            .add("type", "seria")
+            .add("type", kind)
             .add("id", id)
             .add("hash", hash)
             .build()
@@ -223,13 +256,17 @@ class Domanime :
             .set("User-Agent", UA)
             .build()
 
+        val body = client.newCall(POST("https://$host/ftor", apiHeaders, form)).awaitSuccess().bodyText()
+        return parseLinks(body, translation, host)
+    }
+
+    /** Разбор ответа Kodik: {links:{720:[{src:...}],...}}. */
+    private fun parseLinks(body: String, translation: String, host: String): List<Video> {
+        val links = runCatching { JSONObject(body).optJSONObject("links") }.getOrNull() ?: return emptyList()
         val videoHeaders = Headers.Builder()
             .set("Referer", "https://$host/")
             .set("User-Agent", UA)
             .build()
-
-        val body = client.newCall(POST("https://$host/ftor", apiHeaders, form)).awaitSuccess().bodyText()
-        val links = runCatching { JSONObject(body).optJSONObject("links") }.getOrNull() ?: return emptyList()
 
         val result = mutableListOf<Video>()
         links.keys().asSequence().sortedByDescending { it.toIntOrNull() ?: 0 }.forEach { quality ->
