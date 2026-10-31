@@ -214,11 +214,13 @@ class AniJoy :
         }.orEmpty()
 
         // Сайт часто отдаёт в API лишь часть серий: полный список лежит в плеере.
+        // В приложении свежие серии должны быть сверху — как в остальных расширениях.
+        val apiSorted = fromApi.distinctBy { it.episode_number }.sortedByDescending { it.episode_number }
         val expected = expectedEpisodes(animeId)
-        if (fromApi.size >= expected && fromApi.isNotEmpty()) return fromApi
+        if (apiSorted.size >= expected && apiSorted.isNotEmpty()) return apiSorted
 
         val fromPlayer = episodesFromPlayer(animeId)
-        if (fromPlayer.isEmpty()) return fromApi
+        if (fromPlayer.isEmpty()) return apiSorted
         return fromPlayer
     }
 
@@ -259,7 +261,7 @@ class AniJoy :
         // поэтому одинаковые номера схлопываем.
         return episodes
             .distinctBy { it.episode_number }
-            .sortedBy { it.episode_number }
+            .sortedByDescending { it.episode_number }
     }
 
     private fun kodikHeaders(): Headers = headers.newBuilder()
