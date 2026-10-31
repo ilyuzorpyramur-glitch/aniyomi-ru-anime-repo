@@ -161,10 +161,17 @@ class Tvigle : AnimeHttpLegacySource() {
     override fun animeDetailsParse(response: Response): SAnime = throw UnsupportedOperationException("Not used.")
 
     override suspend fun getAnimeDetails(anime: SAnime): SAnime {
-        val product = client
+        val response = client
             .newCall(GET("$apiUrl/product${anime.url}", apiHeaders()))
             .awaitSuccess()
-            .parseAs<ProductDto>()
+        // Диагностика: видно, что реально пришло, если разбор снова упадёт.
+        val probe = response.peekBody(400_000).string()
+        android.util.Log.e(
+            "TvigleDbg",
+            "url=${response.request.url} len=${probe.length} " +
+                "at1600=${probe.substring(1600, minOf(1720, probe.length))}",
+        )
+        val product = response.parseAs<ProductDto>()
 
         return product.toSAnime()
     }
