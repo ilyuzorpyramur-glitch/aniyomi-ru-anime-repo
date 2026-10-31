@@ -159,7 +159,7 @@ class Amedia :
 
     override fun episodeListRequest(anime: SAnime): Request {
         val id = currentAnimeId.ifBlank { relayId(anime.url) }
-        return GET(RELAY_URL.replace("{id}", id), headers)
+        return GET(baseUrl + RELAY_URL.replace("{id}", id), headers)
     }
 
     private fun relayId(path: String): String = runCatching {
