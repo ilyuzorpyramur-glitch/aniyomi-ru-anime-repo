@@ -71,17 +71,22 @@ class AniMaunt :
 
     override fun latestUpdatesParse(response: Response): AnimesPage = parseList(response)
 
-    override fun getFilterList() = FILTERS
+    override fun getFilterList() = eu.kanade.tachiyomi.animesource.model.AnimeFilterList(SectionsFilter())
 
     override fun searchAnimeRequest(page: Int, query: String, filters: eu.kanade.tachiyomi.animesource.model.AnimeFilterList): Request {
-        val section = SECTIONS.getOrNull(SECTIONS_FILTER.state - 1)?.second
-        val genre = GENRES.getOrNull(GENRES_FILTER.state - 1)?.second
-        val path = genre ?: section ?: CATALOG_PATH
+        val state = filters.filterIsInstance<SectionsFilter>().firstOrNull()?.state ?: 0
+        val path = SECTIONS.getOrNull(state - 1)?.second ?: CATALOG_PATH
         if (query.isBlank()) return GET(pageUrl(path, page), headers)
         val encoded = java.net.URLEncoder.encode(query, "UTF-8")
         val url = "$baseUrl" + SEARCH_PATH.replace("{query}", encoded)
         return GET(url, headers)
     }
+
+    /** Раздел каталога. Select абстрактный, поэтому подкласс, а не экземпляр. */
+    private class SectionsFilter : eu.kanade.tachiyomi.animesource.model.AnimeFilter.Select<String>(
+        "Раздел",
+        SECTIONS.map { it.first }.toTypedArray(),
+    )
 
     override fun searchAnimeParse(response: Response): AnimesPage = parseList(response)
 
@@ -383,24 +388,13 @@ class AniMaunt :
             "Приключения" to "/anime/priklyucheniya/",
             "Психология" to "/anime/psihologiya/",
             "Романтика" to "/anime/romantika/",
-            "Сверхъестественное" to "/anime/sverhestestvennoe/",
+            "Сверхъестественное" to "/anime/sverhestestvennoe/"
         )
 
         private val GENRES = listOf(
-            "Все" to "",
+            "Все" to ""
         )
 
-        private val SECTIONS_FILTER = eu.kanade.tachiyomi.animesource.model.AnimeFilter.Select<String>(
-            "Раздел",
-            SECTIONS.map { it.first }.toTypedArray(),
-        )
-
-        private val GENRES_FILTER = eu.kanade.tachiyomi.animesource.model.AnimeFilter.Select<String>(
-            "Жанр",
-            GENRES.map { it.first }.toTypedArray(),
-        )
-
-        private val FILTERS = eu.kanade.tachiyomi.animesource.model.AnimeFilterList(SECTIONS_FILTER)
         private const val SEARCH_PATH = "/?do=search&subaction=search&story={query}"
         private const val PAGE_SUFFIX = "page/{page}/"
         private const val PAGE_MARKER = "page/"
@@ -414,7 +408,6 @@ class AniMaunt :
         private const val RELAY_URL = "/engine/ajax/controller.php?mod=player&id={id}&slot={slot}"
         private const val MAX_SLOTS = 4
         private const val PLAYER_MODE = "iframe"
-
         // Плеер лежит либо в <iframe src>, либо в data-iframe у кнопки серии.
         // «[HD (720p)]https://host/video/720/1.mp4» — метка и адрес.
         private val LABELED_URL = Regex(
