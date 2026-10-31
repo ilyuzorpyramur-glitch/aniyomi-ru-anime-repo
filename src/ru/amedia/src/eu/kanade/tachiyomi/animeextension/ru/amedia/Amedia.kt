@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.animeextension.ru.amedia
 
 import android.app.Application
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
@@ -169,12 +170,15 @@ class Amedia :
 
     override fun episodeListParse(response: Response): List<SEpisode> {
         val player = playerFromRelay(response)
+        Log.e("Amedia", "player=" + player)
         if (player.isBlank()) return emptyList()
 
         val page = runCatching {
             client.newCall(GET(player, playerHeaders())).execute()
                 .use { it.bodyString() }
-        }.getOrNull() ?: return emptyList()
+        }.onFailure { Log.e("Amedia", "player page error", it) }.getOrNull() ?: return emptyList()
+
+        Log.e("Amedia", "page=" + page.length + " options=" + EPISODE_OPTION_REGEX.findAll(page).count())
 
         return EPISODE_OPTION_REGEX.findAll(page).mapNotNull { match ->
             val attrs = attrsOf(match.value)
@@ -194,7 +198,10 @@ class Amedia :
     private fun Float.toEpisodeNumber(): String = if (this % 1f == 0f) toInt().toString() else toString()
 
     private fun playerFromRelay(response: Response): String {
-        val body = runCatching { response.bodyString() }.getOrNull() ?: return ""
+        val body = runCatching { response.bodyString() }
+            .onFailure { Log.e("Amedia", "relay body error", it) }
+            .getOrNull() ?: return ""
+        Log.e("Amedia", "relay=" + body.take(160))
         val root = runCatching { JSONObject(body) }.getOrNull() ?: return ""
         return root.optJSONObject("data")?.optString("src").orEmpty()
     }
