@@ -15,11 +15,11 @@ import keiyoushi.utils.bodyString
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Headers
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
 import org.json.JSONObject
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -149,9 +149,11 @@ class Amedia :
         }
     }
 
-    private fun metaOf(doc: org.jsoup.nodes.Document, property: String): String? =
-        doc.selectFirst("""meta[property="$property"]""")?.attr("content")?.takeIf { it.isNotBlank() }
-            ?: doc.selectFirst("""meta[name="$property"]""")?.attr("content")?.takeIf { it.isNotBlank() }
+    private fun metaOf(doc: Document, property: String): String? {
+        val byProperty = doc.selectFirst("""meta[property="$property"]""")?.attr("content")
+        if (!byProperty.isNullOrBlank()) return byProperty
+        return doc.selectFirst("""meta[name="$property"]""")?.attr("content")?.takeIf { it.isNotBlank() }
+    }
 
     // =============================== Серии ================================
 
