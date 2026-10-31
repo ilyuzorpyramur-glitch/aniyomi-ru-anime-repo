@@ -83,10 +83,11 @@ class AniMaunt :
     }
 
     /** Раздел каталога. Select абстрактный, поэтому подкласс, а не экземпляр. */
-    private class SectionsFilter : eu.kanade.tachiyomi.animesource.model.AnimeFilter.Select<String>(
-        "Раздел",
-        SECTIONS.map { it.first }.toTypedArray(),
-    )
+    private class SectionsFilter :
+        eu.kanade.tachiyomi.animesource.model.AnimeFilter.Select<String>(
+            "Раздел",
+            SECTIONS.map { it.first }.toTypedArray(),
+        )
 
     override fun searchAnimeParse(response: Response): AnimesPage = parseList(response)
 
@@ -388,11 +389,11 @@ class AniMaunt :
             "Приключения" to "/anime/priklyucheniya/",
             "Психология" to "/anime/psihologiya/",
             "Романтика" to "/anime/romantika/",
-            "Сверхъестественное" to "/anime/sverhestestvennoe/"
+            "Сверхъестественное" to "/anime/sverhestestvennoe/",
         )
 
         private val GENRES = listOf(
-            "Все" to ""
+            "Все" to "",
         )
 
         private const val SEARCH_PATH = "/?do=search&subaction=search&story={query}"
