@@ -212,6 +212,18 @@ class YummyAnime :
         return playerHosters(others) + cvhHosters
     }
 
+    /**
+     * Точка входа приложения: одно видео-списком на серию. Обходим хостеров здесь,
+     * а не в базовом классе, чтобы падение одного плеера не съедало остальные.
+     */
+    override suspend fun getVideoList(episode: SEpisode): List<Video> {
+        val videos = mutableListOf<Video>()
+        for (hoster in getHosterList(episode)) {
+            videos += catching { getVideoList(hoster) }.getOrDefault(emptyList())
+        }
+        return videos.let(::applyQualityPreference).let(::voicesBeforeSubtitles)
+    }
+
     private fun playerHosters(videos: List<YummyVideoDto>): List<Hoster> = videos.mapNotNull { video ->
         val player = video.data?.player?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
         if (player.contains("Alloha", ignoreCase = true)) return@mapNotNull null
