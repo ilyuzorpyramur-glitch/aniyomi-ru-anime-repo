@@ -6,6 +6,8 @@ import android.util.Log
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
+import eu.kanade.tachiyomi.animesource.model.AnimeFilter
+import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
@@ -71,9 +73,14 @@ class Amedia :
 
     override fun latestUpdatesParse(response: Response): AnimesPage = parseList(response)
 
-    override fun searchAnimeRequest(page: Int, query: String, filters: eu.kanade.tachiyomi.animesource.model.AnimeFilterList): Request {
-        val encoded = java.net.URLEncoder.encode(query, "UTF-8")
-        val url = "$baseUrl" + SEARCH_PATH.replace("{query}", encoded)
+    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
+        val genre = filters.filterIsInstance<GenreFilter>().firstOrNull()?.slug.orEmpty()
+        val state = filters.filterIsInstance<StatusFilter>().firstOrNull()?.path.orEmpty()
+        val url = when {
+            genre.isNotBlank() -> "$baseUrl$GENRE_PREFIX$genre/"
+            state.isNotBlank() -> "$baseUrl$state"
+            else -> "$baseUrl" + SEARCH_PATH.replace("{query}", java.net.URLEncoder.encode(query, "UTF-8"))
+        }
         return GET(url, headers)
     }
 
@@ -82,16 +89,19 @@ class Amedia :
     private fun parseList(response: Response): AnimesPage {
         val html = response.bodyString()
         val linkFilter = Regex(LINK_FILTER)
-        val animes = ANCHOR_REGEX.findAll(html)
-            .mapNotNull { match ->
-                val href = match.groupValues[1]
+
+        // Карточка сайта: ссылка с названием и картинка лежат в разных блоках,
+        // поэтому берём постер из всего куска карточки, а не из ссылки.
+        val animes = html.split(CARD_MARKER)
+            .drop(1)
+            .mapNotNull { card ->
+                val href = HREF_REGEX.find(card)?.groupValues?.get(1) ?: return@mapNotNull null
                 if (!linkFilter.containsMatchIn(href)) return@mapNotNull null
-                val path = href.substringAfter(baseUrl, href)
-                val body = match.groupValues[2]
                 SAnime.create().apply {
-                    url = path
-                    title = cleanTitle(textOf(body)).ifBlank { altOf(body) }
-                    thumbnail_url = imageOf(body)?.let(::absoluteUrl)
+                    url = href.substringAfter(baseUrl, href)
+                    title = cleanTitle(TITLE_REGEX.find(card)?.groupValues?.get(1)?.let(::textOf).orEmpty())
+                        .ifBlank { altOf(card) }
+                    thumbnail_url = imageOf(card)?.let(::absoluteUrl)
                     initialized = false
                 }
             }
@@ -99,11 +109,11 @@ class Amedia :
             .distinctBy { it.url }
             .toList()
 
-        val nextPage = html.contains("${PAGE_MARKER}${response.request.url.toString().let { pageOf(it) + 1 }}")
+        // Сайт не отдаёт разметку страниц: у него нет ни pager, ни rel=next,
+        // а /page/2/ возвращает те же тайтлы. Вторую страницу не запрашиваем.
+        val nextPage = PAGER_REGEX.containsMatchIn(html)
         return AnimesPage(animes, nextPage)
     }
-
-    private fun pageOf(url: String): Int = Regex("""(?:page/|page=|/)(\d+)""").find(url)?.groupValues?.get(1)?.toIntOrNull() ?: 1
 
     private fun textOf(fragment: String): String = Jsoup.parse(fragment).text()
 
@@ -138,14 +148,23 @@ class Amedia :
             title = cleanTitle(doc.selectFirst(DETAILS_TITLE)?.text().orEmpty()).ifBlank { "Без названия" }
             thumbnail_url = (metaOf(doc, "og:image") ?: doc.selectFirst(POSTER_SELECTOR)?.absUrl("src"))
                 ?.let(::absoluteUrl)
-            description = metaOf(doc, "og:description")
-                ?: doc.selectFirst(DESC_SELECTOR)?.text()?.takeIf { it.length > 80 }
+            description = (metaOf(doc, "og:description")
+                ?: doc.selectFirst(DESC_SELECTOR)?.text()?.takeIf { it.length > 80 })
+                ?.let { text ->
+                    val rating = RATING_REGEX.find(html)?.groupValues?.get(1)?.replace(',', '.')
+                    if (rating.isNullOrBlank()) text else "$text\n\nРейтинг: $rating/10"
+                }
             genre = doc.select(GENRE_SELECTOR).map { it.text().trim() }
                 .filter { it.isNotEmpty() && it.length < 24 }
                 .distinct()
                 .take(12)
                 .joinToString(", ")
                 .ifBlank { null }
+            status = when {
+                html.contains("выходит с", ignoreCase = true) -> SAnime.ONGOING
+                html.contains("Завершён", ignoreCase = true) -> SAnime.COMPLETED
+                else -> SAnime.UNKNOWN
+            }
             initialized = true
         }
     }
@@ -284,11 +303,12 @@ class Amedia :
         private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
-        private const val CATALOG_PATH = "/"
+        private const val CATALOG_PATH = "/top/"
         private const val LATEST_PATH = "/"
         private const val SEARCH_PATH = "/search/?q={query}"
+        private const val GENRE_PREFIX = "/genre/"
+        private const val ONGOING_PATH = "/anime/status/ongoing/"
         private const val PAGE_SUFFIX = "page/{page}/"
-        private const val PAGE_MARKER = "page/"
         private const val LINK_FILTER = """/\d+[^"']+\.html"""
 
         private const val DETAILS_TITLE = "h1"
@@ -296,13 +316,44 @@ class Amedia :
         private const val DESC_SELECTOR = "div"
         private const val GENRE_SELECTOR = "a[href*='/genre/']"
 
+        private const val CARD_MARKER = """<div class="animedia-poster"""
+        private val HREF_REGEX = Regex("""href="(/[^"]+\.html)"""")
+        private val TITLE_REGEX = Regex("""<h3[^>]*>(.*?)</h3>""", RegexOption.DOT_MATCHES_ALL)
+        private val PAGER_REGEX = Regex("""animedia-pager|rel="next"""")
+        private val RATING_REGEX = Regex("""card__rating-ext[^>]*>(\d+(?:[.,]\d+)?)""")
+
+
         private const val RELAY_URL = "/engine/ajax/controller.php?mod=player&id={id}&slot={slot}"
         private const val MAX_SLOTS = 4
 
-        private val ANCHOR_REGEX = Regex(
-            """<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>""",
-            setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE),
-        )
         private val EPISODE_OPTION_REGEX = Regex("""<option[^>]*data-hash="[^"]+"[^>]*>""", RegexOption.IGNORE_CASE)
     }
+}
+
+/** Жанр сайта: адрес вида /genre/<slug>/ — проверено на живом сайте. */
+private class GenreFilter(selection: Int = 0) : AnimeFilter.Select<String>(
+    "Жанр",
+    arrayOf(
+        "Любой", "Боевик", "Приключения", "Комедия", "Драма", "Фэнтези",
+        "Романтика", "Фантастика", "Триллер", "Ужасы", "Детектив", "Спорт", "Исекай", "Этти",
+    ),
+    selection,
+) {
+    val slug: String get() = SLUGS.getOrElse(state) { "" }
+
+    companion object {
+        private val SLUGS = arrayOf(
+            "", "action", "adventure", "comedy", "drama", "fantasy",
+            "romance", "sci-fi", "thriller", "horror", "detective", "sport", "isekai", "ecchi",
+        )
+    }
+}
+
+/** Статус: у сайта работает только /anime/status/ongoing/. */
+private class StatusFilter(selection: Int = 0) : AnimeFilter.Select<String>(
+    "Статус",
+    arrayOf("Любой", "Онгоинг"),
+    selection,
+) {
+    val path: String get() = if (state == 1) "/anime/status/ongoing/" else ""
 }
