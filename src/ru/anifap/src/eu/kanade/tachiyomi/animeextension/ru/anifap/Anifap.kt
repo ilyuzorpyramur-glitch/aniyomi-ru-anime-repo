@@ -311,7 +311,7 @@ class Anifap :
             name = title
             episode_number = number
         }
-    }.distinctBy { it.url }.sortedByDescending { it.episode_number }
+    }.toList().distinctBy { it.url }.sortedByDescending { it.episode_number }
 
     private fun unescapeUnicode(text: String): String = UNICODE_ESCAPE.replace(text) { match ->
         runCatching { match.groupValues[1].toInt(16).toChar().toString() }.getOrDefault(match.value)
