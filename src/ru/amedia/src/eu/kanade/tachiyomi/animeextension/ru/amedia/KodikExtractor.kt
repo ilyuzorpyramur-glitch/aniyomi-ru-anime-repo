@@ -100,8 +100,10 @@ class KodikExtractor(
             val links = requestLinks(useParams, translation, id, hash, serial) ?: continue
             Log.e(TAG, "ftor " + translation.title + " -> " + links.keys().asSequence().toList())
 
+            // Одна озвучка — один пункт списка: качество выбирается в настройках,
+            // иначе на восемь озвучек получается почти две сотни строк.
             val available = qualities.filter { links.has(it) }
-            val ordered = available.ifEmpty { listOfNotNull(links.keys().asSequence().maxOrNull()) }
+            val ordered = available.take(1).ifEmpty { listOfNotNull(links.keys().asSequence().maxOrNull()) }
 
             for (quality in ordered) {
                 val src = links.optJSONArray(quality)?.optJSONObject(0)?.optString("src").orEmpty()
