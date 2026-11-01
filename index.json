@@ -74,10 +74,10 @@
   {
     "name": "Aniyomi: AniMaunt",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.animaunt",
-    "apk": "aniyomi-ru.animaunt-v14.12.apk",
+    "apk": "aniyomi-ru.animaunt-v14.13.apk",
     "lang": "ru",
-    "code": 12,
-    "version": "14.12",
+    "code": 13,
+    "version": "14.13",
     "nsfw": 0,
     "sources": [
       {
