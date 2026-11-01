@@ -165,7 +165,10 @@ class Anifap :
             // Это факт со страницы: вышло меньше — онгоинг, все — завершён.
             val pageText = doc.text()
             val episodes = Regex("""Эпизоды:\s*(\d+)\s*из\s*(\d+)""").find(pageText)
-            val byRow = statusOf(row("Статус"))
+            val byRow = statusOf(
+                Regex("""Статус:?\s*</[^>]+>\s*(?:<[^>]+>\s*)?([^<]{2,30})""")
+                    .find(html)?.groupValues?.get(1)?.trim(),
+            )
             status = if (byRow != SAnime.UNKNOWN) {
                 byRow
             } else {
