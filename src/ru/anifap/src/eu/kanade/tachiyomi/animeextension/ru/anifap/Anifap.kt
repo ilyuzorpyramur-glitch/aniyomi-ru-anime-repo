@@ -202,10 +202,13 @@ class Anifap :
     }.getOrDefault("")
 
     override fun episodeListParse(response: Response): List<SEpisode> {
+        // Сайт держит серии в JSON-поле scode: «"name":"… 3 серия","scode":"<iframe src=\"/video.php?id=NNN…».
+        val html = runCatching { response.bodyString() }.getOrNull().orEmpty()
+        scodeEpisodes(html).takeIf { it.isNotEmpty() }?.let { return it }
+
         if (PLAYER_MODE == "iframe") {
             // Плеер лежит прямо на странице тайтла: серии отдельными ссылками
             // такие сайты не отдают, поэтому показываем одну серию.
-            val html = runCatching { response.bodyString() }.getOrNull() ?: return emptyList()
             val iframe = IFRAME_REGEX.find(html)?.groupValues?.get(1) ?: return emptyList()
             return listOf(
                 SEpisode.create().apply {
@@ -297,6 +300,23 @@ class Anifap :
         videos
     }
 
+    /** Серии из scode: номер берём из названия, адрес — страница video.php с плеером. */
+    private fun scodeEpisodes(html: String): List<SEpisode> = SCODES_REGEX.findAll(html).mapNotNull { match ->
+        val id = match.groupValues[2]
+        val title = unescapeUnicode(match.groupValues[1])
+        val number = Regex("""(\d+)\s*серия""").find(title)?.groupValues?.get(1)?.toFloatOrNull()
+            ?: return@mapNotNull null
+        SEpisode.create().apply {
+            url = "$baseUrl/video.php?id=$id#e=" + number.toInt()
+            name = title
+            episode_number = number
+        }
+    }.distinctBy { it.url }.sortedByDescending { it.episode_number }
+
+    private fun unescapeUnicode(text: String): String = UNICODE_ESCAPE.replace(text) { match ->
+        runCatching { match.groupValues[1].toInt(16).toChar().toString() }.getOrDefault(match.value)
+    }
+
     /** Не-Kodik плееры обычно кладут ссылки прямо в разметку.
      *
      *  Часто это строка вида «[HD (720p)]https://...mp4,[SD]https://...mp4»,
@@ -316,12 +336,28 @@ class Anifap :
             Video(match.value, "Видео", match.value, headers = playerHeaders())
         }.toList()
 
-        Log.e("Amedia", "direct links=" + (decoded.size + labeled.size + plain.size))
-        (decoded + labeled + plain).distinctBy { it.videoUrl }
+        // Плеер-обёртка: video.php отдаёт iframe на hencdn, ссылки лежат уже там.
+        val nested = IFRAME_REGEX.find(page)?.groupValues?.get(1)?.let(::absoluteUrl)
+        val inner = if (nested != null) {
+            runCatching {
+                client.newCall(GET(nested, playerHeaders())).execute().use { it.bodyString() }
+            }.getOrDefault("")
+        } else {
+            ""
+        }
+        val playlists = PLAYLIST_URL.findAll(inner.ifBlank { page }).map { match ->
+            val url = match.value.replace("&amp;", "&")
+            Video(url, qualityOf(url), url, headers = playerHeaders())
+        }.toList()
+
+        Log.e("Amedia", "direct links=" + (decoded.size + labeled.size + plain.size + playlists.size))
+        (decoded + labeled + playlists + plain).distinctBy { it.videoUrl }
     }.getOrElse {
         Log.e("Amedia", "direct error", it)
         emptyList()
     }
+
+    private fun qualityOf(url: String): String = QUALITY_IN_URL.find(url)?.groupValues?.get(1)?.let { it + "p" } ?: "Видео"
 
     /** intrdb и подобные прячут список качеств в base64: «[480p]url,[720p]url». */
     private fun decodePlaylist(encoded: String): List<Video> = runCatching {
@@ -373,6 +409,12 @@ class Anifap :
             """\[([^\]\[]{2,24})\]\s*(https?://[^"'\s,\]]+?\.(?:m3u8|mp4))""",
             RegexOption.IGNORE_CASE,
         )
+        private val SCODES_REGEX = Regex(
+            """"name"\s*:\s*"([^"]{2,300})"[^{}]{0,60}"scode"\s*:\s*"[^"]*?video\.php\?id=(\d+)""",
+        )
+        private val UNICODE_ESCAPE = Regex("""\\u([0-9a-fA-F]{4})""")
+        private val PLAYLIST_URL = Regex("""https?://[^"'\s,\]]*?\.(?:m3u8|mp4)[^"'\s,\]]*""")
+        private val QUALITY_IN_URL = Regex("""_(\d{3,4})\.mp4""")
         private val PLAIN_URL = Regex(
             """https?://[^"'\s,\]]+?\.(?:m3u8|mp4)""",
             RegexOption.IGNORE_CASE,
