@@ -388,7 +388,7 @@ class AniMaunt :
             val match = LABELED_URL.find(part.trim()) ?: return@mapNotNull null
             val quality = match.groupValues[1].trim()
             val url = match.groupValues[2]
-            Video(url, quality, referer, headers = headersFor(referer))
+            Video(url, quality, url, headers = headersFor(referer))
         }.distinctBy { it.videoUrl }
     }
 
@@ -397,24 +397,26 @@ class AniMaunt :
         val decoded = ATOB_REGEX.find(page)?.groupValues?.get(1)?.let(::decodePlaylist).orEmpty()
 
         val labeled = LABELED_URL.findAll(page).map { match ->
-            Video(match.groupValues[2], match.groupValues[1].trim(), referer, headers = headersFor(referer))
+            val url = match.groupValues[2]
+            Video(url, match.groupValues[1].trim(), url, headers = headersFor(referer))
         }.toList()
 
         // playerjs кладёт ВСЕ качества одной строкой: file":"[Mobile (320p)]url,[SD (480p)]url"
         val fromJson = JSON_FILE_VALUE.findAll(page).flatMap { field ->
             val text = field.groupValues[1].replace("""\/""", "/")
             val pairs = LABELED_URL.findAll(text).map { match ->
-                Video(match.groupValues[2], match.groupValues[1].trim(), referer, headers = headersFor(referer))
+                val url = match.groupValues[2]
+                Video(url, match.groupValues[1].trim(), url, headers = headersFor(referer))
             }.toList()
             pairs.ifEmpty {
                 PLAIN_URL.findAll(text).map { match ->
-                    Video(match.value, "Видео", referer, headers = headersFor(referer))
+                    Video(match.value, "Видео", match.value, headers = headersFor(referer))
                 }.toList()
             }
         }.toList()
 
         val plain = PLAIN_URL.findAll(page).map { match ->
-            Video(match.value, "Видео", referer, headers = headersFor(referer))
+            Video(match.value, "Видео", match.value, headers = headersFor(referer))
         }.toList()
 
         return (decoded + labeled + fromJson + plain).distinctBy { it.videoUrl }
