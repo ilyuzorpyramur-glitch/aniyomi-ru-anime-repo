@@ -13,10 +13,12 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
+import eu.kanade.tachiyomi.network.POST
 import keiyoushi.utils.AnimeHttpLegacySource
 import keiyoushi.utils.bodyString
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.FormBody
 import okhttp3.Headers
 import okhttp3.Request
 import okhttp3.Response
@@ -67,11 +69,17 @@ class Amedia :
 
     override fun popularAnimeRequest(page: Int): Request = GET(pageUrl(CATALOG_PATH, page), headers)
 
-    override fun popularAnimeParse(response: Response): AnimesPage = parseList(response)
+    override fun popularAnimeParse(response: Response): AnimesPage = parseList(response, paged = false)
 
-    override fun latestUpdatesRequest(page: Int): Request = GET(pageUrl(LATEST_PATH, page), headers)
+    override fun latestUpdatesRequest(page: Int): Request =
+        if (page <= 1) {
+            GET(pageUrl(LATEST_PATH, 1), headers)
+        } else {
+            // Сайт листает «Показать ещё» через AJAX: по 12 тайтлов на страницу.
+            POST("$baseUrl$AJAX_PATH", ajaxHeaders(), ajaxBody(page))
+        }
 
-    override fun latestUpdatesParse(response: Response): AnimesPage = parseList(response)
+    override fun latestUpdatesParse(response: Response): AnimesPage = parseList(response, paged = true)
 
     override fun getFilterList(): AnimeFilterList = AnimeFilterList(GenreFilter(), StatusFilter())
 
@@ -86,9 +94,20 @@ class Amedia :
         return GET(url, headers)
     }
 
-    override fun searchAnimeParse(response: Response): AnimesPage = parseList(response)
+    override fun searchAnimeParse(response: Response): AnimesPage = parseList(response, paged = false)
 
-    private fun parseList(response: Response): AnimesPage {
+    private fun ajaxHeaders(): Headers = headers.newBuilder()
+        .set("X-Requested-With", "XMLHttpRequest")
+        .set("Referer", "$baseUrl/")
+        .build()
+
+    private fun ajaxBody(page: Int): FormBody = FormBody.Builder()
+        .add("mod", "custom_ajax")
+        .add("name", "all")
+        .add("page", page.toString())
+        .build()
+
+    private fun parseList(response: Response, paged: Boolean = false): AnimesPage {
         val html = response.bodyString()
         val linkFilter = Regex(LINK_FILTER)
 
@@ -114,9 +133,8 @@ class Amedia :
             .distinctBy { it.url }
             .toList()
 
-        // Сайт не отдаёт разметку страниц: у него нет ни pager, ни rel=next,
-        // а /page/2/ возвращает те же тайтлы. Вторую страницу не запрашиваем.
-        val nextPage = PAGER_REGEX.containsMatchIn(html)
+        // «Показать ещё» отдаёт по 12 тайтлов; когда сайт отвечает пусто — конец.
+        val nextPage = paged && animes.isNotEmpty()
         return AnimesPage(animes, nextPage)
     }
 
@@ -313,6 +331,7 @@ class Amedia :
         private const val CATALOG_PATH = "/top/"
         private const val LATEST_PATH = "/"
         private const val SEARCH_PATH = "/search/?q={query}"
+        private const val AJAX_PATH = "/engine/ajax/controller.php"
         private const val GENRE_PREFIX = "/genre/"
         private const val ONGOING_PATH = "/anime/status/ongoing/"
         private const val PAGE_SUFFIX = "page/{page}/"

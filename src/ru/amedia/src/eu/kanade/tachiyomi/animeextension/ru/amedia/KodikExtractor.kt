@@ -4,7 +4,6 @@ import android.content.SharedPreferences
 import android.net.Uri
 import android.util.Base64
 import android.util.Log
-import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.awaitSuccess
@@ -26,6 +25,8 @@ class KodikExtractor(
     private val baseUrl: String,
     private val preferences: SharedPreferences,
 ) {
+    private val pageCache = mutableMapOf<String, String>()
+
     private data class Translation(
         val id: String,
         val title: String,
@@ -49,7 +50,7 @@ class KodikExtractor(
             return emptyList()
         }
 
-        val episodeAttrs = episodeAttrs(page, episode)
+        val baseAttrs = parseEpisodeAttrs(page, episode)
         val parsed = parseTranslations(page)
         Log.e(TAG, "page=" + page.length + " translations=" + parsed.size)
 
@@ -57,7 +58,7 @@ class KodikExtractor(
         // а ссылки запрашиваются по id/hash самой серии. Тогда собираем одну
         // «озвучку» из атрибутов серии, иначе плеер молча отдаёт пустой список.
         val translations = parsed.ifEmpty {
-            val attrs = episodeAttrs ?: return emptyList()
+            val attrs = baseAttrs ?: return emptyList()
             val seriesId = attrs["data-id"].orEmpty()
             val seriesHash = attrs["data-hash"].orEmpty()
             if (seriesId.isBlank() || seriesHash.isBlank()) return emptyList()
@@ -74,8 +75,7 @@ class KodikExtractor(
         }
         val ignoreSubs = preferences.getBoolean(PREF_IGNORE_SUBS, true)
 
-        // Озвучки не отбрасываем: все они уходят в звуковые дорожки, чтобы в плеере
-        // можно было переключиться. Настройка лишь поднимает выбранную наверх.
+        // Озвучки не отбрасываем: каждая — отдельный поток Kodik со своими id.
         val usable = translations
             .filter { !ignoreSubs || !it.kind.contains("sub", ignoreCase = true) }
             .distinctBy { it.title + "@" + it.mediaId }
@@ -83,48 +83,58 @@ class KodikExtractor(
             .distinctBy { it.title + "@" + it.mediaId }
 
         val qualities = preferredQualities()
-
-        // Качество и озвучка живут в разных местах плеера: качество — в списке
-        // качеств, озвучка — в звуковых дорожках. Поэтому собираем «качество → озвучки»,
-        // а не плоский список «озвучка + качество».
-        val byQuality = linkedMapOf<String, MutableList<Pair<String, String>>>()
+        val videos = linkedMapOf<String, Video>()
 
         for (translation in orderedTranslations) {
-            val isSerial = translation.mediaType != "video" && episodeAttrs != null
-            val id = if (isSerial) episodeAttrs?.get("data-id").orEmpty() else translation.mediaId
-            val hash = if (isSerial) episodeAttrs?.get("data-hash").orEmpty() else translation.mediaHash
+            // У каждой озвучки свой сериал в Kodik: id и hash серии отличаются.
+            // Если брать их из одной страницы, все озвучки отдают один и тот же
+            // файл, и выбор в плеере ничего не меняет.
+            val serial = translation.mediaType != "video"
+            val own = if (serial) translationPage(translation) else null
+            val useParams = own?.let(::paramsOf) ?: params
+            val attrs = if (serial) (own?.let { parseEpisodeAttrs(it, episode) } ?: baseAttrs) else null
+            val id = if (serial) attrs?.get("data-id").orEmpty() else translation.mediaId
+            val hash = if (serial) attrs?.get("data-hash").orEmpty() else translation.mediaHash
             if (id.isBlank() || hash.isBlank()) continue
 
-            val links = requestLinks(params, translation, id, hash, isSerial) ?: continue
+            val links = requestLinks(useParams, translation, id, hash, serial) ?: continue
             Log.e(TAG, "ftor " + translation.title + " -> " + links.keys().asSequence().toList())
 
             val available = qualities.filter { links.has(it) }
-            val ordered = available.ifEmpty {
-                listOfNotNull(links.keys().asSequence().maxOrNull())
-            }
+            val ordered = available.ifEmpty { listOfNotNull(links.keys().asSequence().maxOrNull()) }
 
             for (quality in ordered) {
                 val src = links.optJSONArray(quality)?.optJSONObject(0)?.optString("src").orEmpty()
                 if (src.isBlank()) continue
                 val url = decode(src) ?: continue
-                byQuality.getOrPut(quality) { mutableListOf() } += translation.title to url
+                videos.putIfAbsent(
+                    url,
+                    Video(
+                        videoUrl = url,
+                        videoTitle = translation.title + " · " + quality + "p",
+                        headers = kodikHeaders(),
+                    ),
+                )
             }
         }
 
-        val videos = byQuality.map { (quality, dubs) ->
-            // Первая озвучка — это сам поток: плеер покажет его звук как дорожку #1.
-            // Остальные уходят в audioTracks, иначе в списке будет дубль.
-            Video(
-                videoUrl = dubs.first().second,
-                videoTitle = quality + "p",
-                headers = kodikHeaders(),
-                audioTracks = dubs.drop(1).map { (name, link) -> Track(link, name) },
-            )
-        }
-
-        Log.e(TAG, "videos=" + videos.size + " dubs=" + byQuality.values.sumOf { it.size })
-        return videos.distinctBy { it.videoUrl }
+        Log.e(TAG, "videos=" + videos.size + " translations=" + orderedTranslations.size)
+        return videos.values.toList()
     }
+
+    /** Страница конкретной озвучки: у неё свои urlParams и свои номера серий. */
+    private suspend fun translationPage(translation: Translation): String? {
+        if (translation.mediaId.isBlank() || translation.mediaHash.isBlank()) return null
+        pageCache[translation.mediaId]?.let { return it }
+        val url = "https://kodikplayer.com/serial/" + translation.mediaId + "/" + translation.mediaHash + "/720p"
+        val text = fetch(url)
+        if (text.isNotBlank()) pageCache[translation.mediaId] = text
+        return text.ifBlank { null }
+    }
+
+    private fun paramsOf(text: String): JSONObject? = URL_PARAMS_REGEX.find(text)
+        ?.groupValues?.get(1)
+        ?.let { runCatching { JSONObject(it) }.getOrNull() }
 
     private suspend fun fetch(url: String): String = runCatching {
         client.newCall(GET(url, kodikHeaders())).awaitSuccess().bodyString()
@@ -145,7 +155,7 @@ class KodikExtractor(
         )
     }.toList()
 
-    private fun episodeAttrs(page: String, episode: Int): Map<String, String>? = EPISODE_OPTION_REGEX.findAll(page)
+    private fun parseEpisodeAttrs(page: String, episode: Int): Map<String, String>? = EPISODE_OPTION_REGEX.findAll(page)
         .map { tagAttrs(it.value) }
         .firstOrNull { it["value"] == episode.toString() && !it["data-hash"].isNullOrBlank() }
 
