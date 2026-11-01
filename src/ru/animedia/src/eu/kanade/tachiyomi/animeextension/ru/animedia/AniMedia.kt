@@ -232,7 +232,9 @@ class AniMedia :
             .awaitSuccess()
             .parseAs<VideoDto>()
 
-        val hlsUrl = video.sources?.hlsUrl?.takeIf { it.isNotBlank() } ?: return emptyList()
+        // Адрес уже с «//expires» — CDN отвечает на такой 400, поэтому чистим сразу.
+        val hlsUrl = video.sources?.hlsUrl?.takeIf { it.isNotBlank() }?.squeezeSlashes()
+            ?: return emptyList()
         val label = item.voiceLabel
 
         // okcdn отдаёт варианты плейлиста путём «/expires/…». При склейке

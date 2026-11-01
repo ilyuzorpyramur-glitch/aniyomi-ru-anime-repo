@@ -256,7 +256,9 @@ class AnimeSSS :
             .awaitSuccess()
             .parseAs<VideoDto>()
 
-        val hlsUrl = video.sources?.hlsUrl?.takeIf { it.isNotBlank() } ?: return emptyList()
+        // okcdn отдаёт адрес с «//expires», на такой CDN отвечает 400.
+        val hlsUrl = video.sources?.hlsUrl?.takeIf { it.isNotBlank() }?.replace(DOUBLE_SLASH, "/")
+            ?: return emptyList()
         val label = item.voiceLabel
 
         return playlistUtils.extractFromHls(
@@ -564,6 +566,7 @@ class AnimeSSS :
 
         private val URL_PARAMS_REGEX = Regex("""urlParams\s*=\s*'(.*?)'""")
         private val QUALITY_REGEX = Regex("""(\d+)p""")
+        private val DOUBLE_SLASH = Regex("""(?<=^https?://[^/]{1,80})//+""")
         private val PAGE_REGEX = Regex("""/page/(\d+)""")
     }
 }
