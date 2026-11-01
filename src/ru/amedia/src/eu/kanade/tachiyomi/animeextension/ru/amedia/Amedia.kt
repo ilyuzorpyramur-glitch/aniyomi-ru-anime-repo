@@ -73,6 +73,8 @@ class Amedia :
 
     override fun latestUpdatesParse(response: Response): AnimesPage = parseList(response)
 
+    override fun getFilterList(): AnimeFilterList = AnimeFilterList(GenreFilter(), StatusFilter())
+
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         val genre = filters.filterIsInstance<GenreFilter>().firstOrNull()?.slug.orEmpty()
         val state = filters.filterIsInstance<StatusFilter>().firstOrNull()?.path.orEmpty()
@@ -332,14 +334,15 @@ class Amedia :
 }
 
 /** Жанр сайта: адрес вида /genre/<slug>/ — проверено на живом сайте. */
-private class GenreFilter(selection: Int = 0) : AnimeFilter.Select<String>(
-    "Жанр",
-    arrayOf(
-        "Любой", "Боевик", "Приключения", "Комедия", "Драма", "Фэнтези",
-        "Романтика", "Фантастика", "Триллер", "Ужасы", "Детектив", "Спорт", "Исекай", "Этти",
-    ),
-    selection,
-) {
+private class GenreFilter(selection: Int = 0) :
+    AnimeFilter.Select<String>(
+        "Жанр",
+        arrayOf(
+            "Любой", "Боевик", "Приключения", "Комедия", "Драма", "Фэнтези",
+            "Романтика", "Фантастика", "Триллер", "Ужасы", "Детектив", "Спорт", "Исекай", "Этти",
+        ),
+        selection,
+    ) {
     val slug: String get() = SLUGS.getOrElse(state) { "" }
 
     companion object {
@@ -351,10 +354,11 @@ private class GenreFilter(selection: Int = 0) : AnimeFilter.Select<String>(
 }
 
 /** Статус: у сайта работает только /anime/status/ongoing/. */
-private class StatusFilter(selection: Int = 0) : AnimeFilter.Select<String>(
-    "Статус",
-    arrayOf("Любой", "Онгоинг"),
-    selection,
-) {
+private class StatusFilter(selection: Int = 0) :
+    AnimeFilter.Select<String>(
+        "Статус",
+        arrayOf("Любой", "Онгоинг"),
+        selection,
+    ) {
     val path: String get() = if (state == 1) "/anime/status/ongoing/" else ""
 }
