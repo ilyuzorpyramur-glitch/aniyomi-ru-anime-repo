@@ -92,10 +92,10 @@
   {
     "name": "Aniyomi: AniMedia",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.animedia",
-    "apk": "aniyomi-ru.animedia-v14.5.apk",
+    "apk": "aniyomi-ru.animedia-v14.6.apk",
     "lang": "ru",
-    "code": 5,
-    "version": "14.5",
+    "code": 6,
+    "version": "14.6",
     "nsfw": 0,
     "sources": [
       {
@@ -200,10 +200,10 @@
   {
     "name": "Aniyomi: AnimeSSS",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.animesss",
-    "apk": "aniyomi-ru.animesss-v14.6.apk",
+    "apk": "aniyomi-ru.animesss-v14.7.apk",
     "lang": "ru",
-    "code": 6,
-    "version": "14.6",
+    "code": 7,
+    "version": "14.7",
     "nsfw": 0,
     "sources": [
       {
