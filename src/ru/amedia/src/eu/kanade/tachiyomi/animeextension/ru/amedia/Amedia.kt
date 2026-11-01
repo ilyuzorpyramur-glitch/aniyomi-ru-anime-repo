@@ -94,15 +94,18 @@ class Amedia :
 
         // Карточка сайта: ссылка с названием и картинка лежат в разных блоках,
         // поэтому берём постер из всего куска карточки, а не из ссылки.
-        val animes = html.split(CARD_MARKER)
+        val animes = CARD_SPLIT.split(html)
             .drop(1)
             .mapNotNull { card ->
                 val href = HREF_REGEX.find(card)?.groupValues?.get(1) ?: return@mapNotNull null
                 if (!linkFilter.containsMatchIn(href)) return@mapNotNull null
+                val rawTitle = (TITLE_REGEX.find(card) ?: LINEK_TITLE_REGEX.find(card))
+                    ?.groupValues?.get(1)
+                    ?.let(::textOf)
+                    .orEmpty()
                 SAnime.create().apply {
                     url = href.substringAfter(baseUrl, href)
-                    title = cleanTitle(TITLE_REGEX.find(card)?.groupValues?.get(1)?.let(::textOf).orEmpty())
-                        .ifBlank { altOf(card) }
+                    title = cleanTitle(rawTitle).ifBlank { altOf(card) }
                     thumbnail_url = imageOf(card)?.let(::absoluteUrl)
                     initialized = false
                 }
@@ -320,7 +323,8 @@ class Amedia :
         private const val DESC_SELECTOR = "div"
         private const val GENRE_SELECTOR = "a[href*='/genre/']"
 
-        private const val CARD_MARKER = """<div class="animedia-poster"""
+        private val CARD_SPLIT = Regex("""class="animedia-(?:poster|linek)(?=[" ])""")
+        private val LINEK_TITLE_REGEX = Regex("""class="animedia-linek__title[^"]*">([^<]+)<""")
         private val HREF_REGEX = Regex("""href="(/[^"]+\.html)"""")
         private val TITLE_REGEX = Regex("""<h3[^>]*>(.*?)</h3>""", RegexOption.DOT_MATCHES_ALL)
         private val PAGER_REGEX = Regex("""animedia-pager|rel="next"""")
