@@ -436,6 +436,7 @@ class Anifap :
         private val EPISODE_OPTION_REGEX = Regex("""<option[^>]*data-hash="[^"]+"[^>]*>""", RegexOption.IGNORE_CASE)
     }
 }
+
 /** «Онгоинг» / «Завершён» в статус Aniyomi. */
 private fun statusOf(text: String?): Int = when {
     text.isNullOrBlank() -> SAnime.UNKNOWN
