@@ -71,13 +71,12 @@ class Amedia :
 
     override fun popularAnimeParse(response: Response): AnimesPage = parseList(response, paged = false)
 
-    override fun latestUpdatesRequest(page: Int): Request =
-        if (page <= 1) {
-            GET(pageUrl(LATEST_PATH, 1), headers)
-        } else {
-            // Сайт листает «Показать ещё» через AJAX: по 12 тайтлов на страницу.
-            POST("$baseUrl$AJAX_PATH", ajaxHeaders(), ajaxBody(page))
-        }
+    override fun latestUpdatesRequest(page: Int): Request = if (page <= 1) {
+        GET(pageUrl(LATEST_PATH, 1), headers)
+    } else {
+        // Сайт листает «Показать ещё» через AJAX: по 12 тайтлов на страницу.
+        POST("$baseUrl$AJAX_PATH", ajaxHeaders(), ajaxBody(page))
+    }
 
     override fun latestUpdatesParse(response: Response): AnimesPage = parseList(response, paged = true)
 
