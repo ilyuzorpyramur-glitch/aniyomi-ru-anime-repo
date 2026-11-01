@@ -148,8 +148,10 @@ class Amedia :
             title = cleanTitle(doc.selectFirst(DETAILS_TITLE)?.text().orEmpty()).ifBlank { "Без названия" }
             thumbnail_url = (metaOf(doc, "og:image") ?: doc.selectFirst(POSTER_SELECTOR)?.absUrl("src"))
                 ?.let(::absoluteUrl)
-            description = (metaOf(doc, "og:description")
-                ?: doc.selectFirst(DESC_SELECTOR)?.text()?.takeIf { it.length > 80 })
+            description = (
+                metaOf(doc, "og:description")
+                    ?: doc.selectFirst(DESC_SELECTOR)?.text()?.takeIf { it.length > 80 }
+                )
                 ?.let { text ->
                     val rating = RATING_REGEX.find(html)?.groupValues?.get(1)?.replace(',', '.')
                     if (rating.isNullOrBlank()) text else "$text\n\nРейтинг: $rating/10"
@@ -321,7 +323,6 @@ class Amedia :
         private val TITLE_REGEX = Regex("""<h3[^>]*>(.*?)</h3>""", RegexOption.DOT_MATCHES_ALL)
         private val PAGER_REGEX = Regex("""animedia-pager|rel="next"""")
         private val RATING_REGEX = Regex("""card__rating-ext[^>]*>(\d+(?:[.,]\d+)?)""")
-
 
         private const val RELAY_URL = "/engine/ajax/controller.php?mod=player&id={id}&slot={slot}"
         private const val MAX_SLOTS = 4
