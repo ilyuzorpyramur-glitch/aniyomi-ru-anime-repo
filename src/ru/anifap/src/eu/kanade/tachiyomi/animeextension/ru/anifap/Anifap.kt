@@ -165,7 +165,8 @@ class Anifap :
             // Это факт со страницы: вышло меньше — онгоинг, все — завершён.
             val pageText = doc.text()
             val episodes = Regex("""Эпизоды:\s*(\d+)\s*из\s*(\d+)""").find(pageText)
-            status = when {
+            val byRow = statusOf(row("Статус"))
+            status = if (byRow != SAnime.UNKNOWN) byRow else when {
                 episodes == null -> SAnime.UNKNOWN
                 episodes.groupValues[1] == episodes.groupValues[2] -> SAnime.COMPLETED
                 else -> SAnime.ONGOING
@@ -309,7 +310,7 @@ class Anifap :
             name = unescapeUnicode(match.groupValues[4]).ifBlank { "Серия " + number.toInt() }
             episode_number = number
         }
-    }.toList().distinctBy { it.url }.sortedByDescending { it.episode_number }
+    }.toList().distinctBy { it.episode_number }.sortedByDescending { it.episode_number }
 
     private fun unescapeUnicode(text: String): String = UNICODE_ESCAPE.replace(text) { match ->
         runCatching { match.groupValues[1].toInt(16).toChar().toString() }.getOrDefault(match.value)
@@ -430,4 +431,11 @@ class Anifap :
         )
         private val EPISODE_OPTION_REGEX = Regex("""<option[^>]*data-hash="[^"]+"[^>]*>""", RegexOption.IGNORE_CASE)
     }
+}
+/** «Онгоинг» / «Завершён» в статус Aniyomi. */
+private fun statusOf(text: String?): Int = when {
+    text.isNullOrBlank() -> SAnime.UNKNOWN
+    text.contains("онгоинг", true) || text.contains("выходит", true) -> SAnime.ONGOING
+    text.contains("заверш", true) || text.contains("full", true) -> SAnime.COMPLETED
+    else -> SAnime.UNKNOWN
 }

@@ -117,11 +117,13 @@ class AniSprout :
                 ?.takeIf { it.isNotBlank() }
                 ?.let { absoluteUrl(it) }
             genre = document.select("ul.tag-list .tag-link").joinToString { it.text().trim() }
-            status = when {
-                episodesInfo == null -> SAnime.UNKNOWN
-                episodesInfo.substringBefore(" из ") == episodesInfo.substringAfter("из ").trim() -> SAnime.COMPLETED
-                else -> SAnime.ONGOING
-            }
+            status = statusOf(
+                document.select("div.meta-line")
+                    .firstOrNull { it.selectFirst("dt")?.text()?.contains("Статус") == true }
+                    ?.selectFirst("dd")
+                    ?.text()
+                    ?.trim(),
+            )
             description = buildString {
                 document.selectFirst(".expanded-area[itemprop=description]")?.text()?.trim()
                     ?.let {
@@ -463,4 +465,12 @@ class AniSprout :
         private val QUALITY_REGEX = Regex("""(\d+)p""")
         private val NUMBER_REGEX = Regex("""\d+(\.\d+)?""")
     }
+}
+
+/** «Онгоинг» / «Завершён» / «Full» — в единый статус Aniyomi. */
+private fun statusOf(text: String?): Int = when {
+    text.isNullOrBlank() -> SAnime.UNKNOWN
+    text.contains("онгоинг", true) || text.contains("выходит", true) || text.contains("ongoing", true) -> SAnime.ONGOING
+    text.contains("заверш", true) || text.contains("completed", true) || text.contains("full", true) -> SAnime.COMPLETED
+    else -> SAnime.UNKNOWN
 }

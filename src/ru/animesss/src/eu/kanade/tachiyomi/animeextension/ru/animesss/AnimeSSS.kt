@@ -121,7 +121,7 @@ class AnimeSSS :
                 .filterNot { it.isBlank() }
                 .joinToString()
             author = row("Студия")
-            status = SAnime.UNKNOWN
+            status = statusOf(row("Статус"))
             description = buildString {
                 document.selectFirst("meta[property=og:description]")?.attr("content")?.trim()
                     ?.takeIf { it.isNotBlank() }
@@ -566,4 +566,12 @@ class AnimeSSS :
         private val QUALITY_REGEX = Regex("""(\d+)p""")
         private val PAGE_REGEX = Regex("""/page/(\d+)""")
     }
+}
+
+/** «Онгоинг» / «Завершён» / «Full» — в единый статус Aniyomi. */
+private fun statusOf(text: String?): Int = when {
+    text.isNullOrBlank() -> SAnime.UNKNOWN
+    text.contains("онгоинг", true) || text.contains("выходит", true) || text.contains("ongoing", true) -> SAnime.ONGOING
+    text.contains("заверш", true) || text.contains("completed", true) || text.contains("full", true) -> SAnime.COMPLETED
+    else -> SAnime.UNKNOWN
 }
