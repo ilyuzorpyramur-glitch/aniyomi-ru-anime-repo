@@ -308,11 +308,12 @@ class Anifap :
         val decoded = ATOB_REGEX.find(page)?.groupValues?.get(1)?.let(::decodePlaylist).orEmpty()
 
         val labeled = LABELED_URL.findAll(page).map { match ->
-            Video(match.groupValues[2], match.groupValues[1].trim(), player, headers = playerHeaders())
+            val url = match.groupValues[2]
+            Video(url, match.groupValues[1].trim(), url, headers = playerHeaders())
         }.toList()
 
         val plain = PLAIN_URL.findAll(page).map { match ->
-            Video(match.value, "Видео", player, headers = playerHeaders())
+            Video(match.value, "Видео", match.value, headers = playerHeaders())
         }.toList()
 
         Log.e("Amedia", "direct links=" + (decoded.size + labeled.size + plain.size))
