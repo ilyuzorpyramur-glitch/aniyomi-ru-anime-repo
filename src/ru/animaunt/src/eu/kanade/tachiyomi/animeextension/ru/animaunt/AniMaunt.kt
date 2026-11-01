@@ -242,13 +242,17 @@ class AniMaunt :
             // Другой плеер (Alloha и подобные): отдаём одну серию, видео достанет getVideoList.
             val other = players.firstOrNull() ?: return emptyList()
             Log.e("Amedia", "не-Kodik плеер: " + other.take(80))
-            return listOf(
-                SEpisode.create().apply {
-                    url = other
-                    name = "Серия 1"
-                    episode_number = 1f
-                },
-            )
+            // Playerjs перечисляет весь сезон на одной странице: у каждой серии
+            // есть название и свой постер, поэтому список собираем из него.
+            playerjsEpisodes(other).ifEmpty {
+                listOf(
+                    SEpisode.create().apply {
+                        url = other
+                        name = "Серия 1"
+                        episode_number = 1f
+                    },
+                )
+            }
         }
 
         val page = runCatching {
@@ -313,7 +317,7 @@ class AniMaunt :
         val videos = if (player.contains("kodik", ignoreCase = true)) {
             kodik.videos(player, 1, number.toInt())
         } else {
-            directVideos(player)
+            directVideos(player, number.toInt())
         }
         if (videos.isEmpty()) throw Exception("Плеер не вернул видео")
         videos
@@ -325,8 +329,13 @@ class AniMaunt :
      *  поэтому берём пары «метка + адрес» и обрезаем адрес по расширению:
      *  иначе в url попадает «,[SD (480p)]https://...» и видео не играет.
      */
-    private fun directVideos(player: String): List<Video> = runCatching {
+    private fun directVideos(player: String, number: Int): List<Video> = runCatching {
         val page = client.newCall(GET(player, headersFor(player))).execute().use { it.bodyString() }
+
+        // Playerjs отдаёт сразу весь сезон: file:[{title,id,poster,file:"[320p]url,[480p]url"}…].
+        // Берём объект нужной серии, иначе в список попадут качества всех серий подряд.
+        playerjsEpisode(page, number)?.let { return@runCatching it }
+
         var found = mediaOf(page, player)
         if (found.isEmpty()) {
             // Плеер-обёртка: внутри ещё один iframe (openni, alloha и подобные).
@@ -342,6 +351,46 @@ class AniMaunt :
     }.getOrElse {
         Log.e("Amedia", "direct error", it)
         emptyList()
+    }
+
+    /** Серии из Playerjs: название, номер и постер каждой лежат в разметке плеера. */
+    private fun playerjsEpisodes(player: String): List<SEpisode> = runCatching {
+        val page = client.newCall(GET(player, headersFor(player))).execute().use { it.bodyString() }
+        val start = page.indexOf("file:[")
+        if (start < 0) return emptyList()
+        page.substring(start).split(OBJECT_SPLIT).mapIndexedNotNull { index, obj ->
+            val stream = PLAYERJS_FILE.find(obj)?.groupValues?.get(1).orEmpty()
+            if (stream.isBlank()) return@mapIndexedNotNull null
+            SEpisode.create().apply {
+                url = player + "#e=" + (index + 1)
+                name = PLAYERJS_TITLE.find(obj)?.groupValues?.get(1)?.trim().orEmpty()
+                    .ifBlank { "Серия " + (index + 1) }
+                episode_number = (index + 1).toFloat()
+                thumbnail_url = PLAYERJS_POSTER.find(obj)?.groupValues?.get(1)?.replace("""\/""", "/")
+            }
+        }
+    }.getOrDefault(emptyList())
+
+    /** Серия из списка Playerjs: у каждой свой набор качеств и свой постер. */
+    private fun playerjsEpisode(page: String, number: Int): List<Video>? {
+        val start = page.indexOf("file:[")
+        if (start < 0) return null
+        val files = PLAYERJS_FILE.findAll(page.substring(start)).map { it.groupValues[1] }.toList()
+        if (files.isEmpty()) return null
+        // Номер серии у сайта начинается с единицы; если его нет — первая запись.
+        val raw = files.getOrNull((number - 1).coerceAtLeast(0)) ?: files.first()
+        return labeledOf(raw, page)
+    }
+
+    /** «[Mobile (320p)]url1 or url2,[HD (720p)]url3» → список видео. */
+    private fun labeledOf(raw: String, referer: String): List<Video> {
+        val text = raw.replace("""\/""", "/")
+        return text.split(",").mapNotNull { part ->
+            val match = LABELED_URL.find(part.trim()) ?: return@mapNotNull null
+            val quality = match.groupValues[1].trim()
+            val url = match.groupValues[2]
+            Video(url, quality, referer, headers = headersFor(referer))
+        }.distinctBy { it.videoUrl }
     }
 
     /** Все медиа-ссылки страницы: base64-плейлист, метки качества, JSON-поля. */
@@ -457,6 +506,10 @@ class AniMaunt :
             RegexOption.IGNORE_CASE,
         )
 
+        private val PLAYERJS_TITLE = Regex(""""?title"?\s*:\s*"([^"]*)""")
+        private val PLAYERJS_POSTER = Regex(""""?poster"?\s*:\s*"([^"]*)""")
+        private val OBJECT_SPLIT = Regex("""\}\s*,\s*\{""")
+        private val PLAYERJS_FILE = Regex("""file"\s*:\s*"([^"]*)"""")
         private val LABELED_URL = Regex(
             """\[([^\]\[]{2,24})\]\s*(https?://[^"'\s,\]]+?\.(?:m3u8|mp4))""",
             RegexOption.IGNORE_CASE,
