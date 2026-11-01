@@ -146,10 +146,10 @@
   {
     "name": "Aniyomi: Anifap",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.anifap",
-    "apk": "aniyomi-ru.anifap-v14.2.apk",
+    "apk": "aniyomi-ru.anifap-v14.3.apk",
     "lang": "ru",
-    "code": 2,
-    "version": "14.2",
+    "code": 3,
+    "version": "14.3",
     "nsfw": 1,
     "sources": [
       {
