@@ -166,10 +166,14 @@ class Anifap :
             val pageText = doc.text()
             val episodes = Regex("""Эпизоды:\s*(\d+)\s*из\s*(\d+)""").find(pageText)
             val byRow = statusOf(row("Статус"))
-            status = if (byRow != SAnime.UNKNOWN) byRow else when {
-                episodes == null -> SAnime.UNKNOWN
-                episodes.groupValues[1] == episodes.groupValues[2] -> SAnime.COMPLETED
-                else -> SAnime.ONGOING
+            status = if (byRow != SAnime.UNKNOWN) {
+                byRow
+            } else {
+                when {
+                    episodes == null -> SAnime.UNKNOWN
+                    episodes.groupValues[1] == episodes.groupValues[2] -> SAnime.COMPLETED
+                    else -> SAnime.ONGOING
+                }
             }
             genre = doc.select(GENRE_SELECTOR).map { it.text().trim() }
                 .filter { it.isNotEmpty() && it.length < 24 }
