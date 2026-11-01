@@ -300,15 +300,13 @@ class Anifap :
         videos
     }
 
-    /** Серии из scode: номер берём из названия, адрес — страница video.php с плеером. */
-    private fun scodeEpisodes(html: String): List<SEpisode> = SCODES_REGEX.findAll(html).mapNotNull { match ->
-        val id = match.groupValues[2]
-        val title = unescapeUnicode(match.groupValues[1])
-        val number = Regex("""(\d+)\s*серия""").find(title)?.groupValues?.get(1)?.toFloatOrNull()
-            ?: return@mapNotNull null
+    /** Серии из RalodePlayer: «"369910":{"aname":"1 серия","sname":"…","scode":"<iframe …video.php?id=369910"}». */
+    private fun scodeEpisodes(html: String): List<SEpisode> = ITEM_REGEX.findAll(html).mapNotNull { match ->
+        val number = match.groupValues[3].toFloatOrNull() ?: return@mapNotNull null
+        val videoId = match.groupValues[5]
         SEpisode.create().apply {
-            url = "$baseUrl/video.php?id=$id#e=" + number.toInt()
-            name = title
+            url = "$baseUrl/video.php?id=$videoId#e=" + number.toInt()
+            name = unescapeUnicode(match.groupValues[4]).ifBlank { "Серия " + number.toInt() }
             episode_number = number
         }
     }.toList().distinctBy { it.url }.sortedByDescending { it.episode_number }
@@ -409,8 +407,8 @@ class Anifap :
             """\[([^\]\[]{2,24})\]\s*(https?://[^"'\s,\]]+?\.(?:m3u8|mp4))""",
             RegexOption.IGNORE_CASE,
         )
-        private val SCODES_REGEX = Regex(
-            """"name"\s*:\s*"([^"]{2,300})"[^{}]{0,60}"scode"\s*:\s*"[^"]*?video\.php\?id=(\d+)""",
+        private val ITEM_REGEX = Regex(
+            """"(\d+)":\{"id":"(\d+)","parent":"\d+","aname":"(\d+)\s*[^"]*","sname":"((?:[^"\\]|\\.)*)","scode":"(?:[^"\\]|\\.)*?video\.php\?id=(\d+)""",
         )
         private val UNICODE_ESCAPE = Regex("""\\u([0-9a-fA-F]{4})""")
         private val PLAYLIST_URL = Regex("""https?://[^"'\s,\]]*?\.(?:m3u8|mp4)[^"'\s,\]]*""")
