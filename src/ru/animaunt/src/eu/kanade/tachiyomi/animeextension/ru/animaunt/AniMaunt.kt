@@ -244,7 +244,7 @@ class AniMaunt :
             Log.e("Amedia", "не-Kodik плеер: " + other.take(80))
             // Playerjs перечисляет весь сезон на одной странице: у каждой серии
             // есть название и свой постер, поэтому список собираем из него.
-            playerjsEpisodes(other).ifEmpty {
+            return playerjsEpisodes(other).ifEmpty {
                 listOf(
                     SEpisode.create().apply {
                         url = other
@@ -366,7 +366,6 @@ class AniMaunt :
                 name = PLAYERJS_TITLE.find(obj)?.groupValues?.get(1)?.trim().orEmpty()
                     .ifBlank { "Серия " + (index + 1) }
                 episode_number = (index + 1).toFloat()
-                thumbnail_url = PLAYERJS_POSTER.find(obj)?.groupValues?.get(1)?.replace("""\/""", "/")
             }
         }
     }.getOrDefault(emptyList())
@@ -507,7 +506,6 @@ class AniMaunt :
         )
 
         private val PLAYERJS_TITLE = Regex(""""?title"?\s*:\s*"([^"]*)""")
-        private val PLAYERJS_POSTER = Regex(""""?poster"?\s*:\s*"([^"]*)""")
         private val OBJECT_SPLIT = Regex("""\}\s*,\s*\{""")
         private val PLAYERJS_FILE = Regex("""file"\s*:\s*"([^"]*)"""")
         private val LABELED_URL = Regex(
