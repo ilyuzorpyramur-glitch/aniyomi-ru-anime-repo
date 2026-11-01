@@ -1,11 +1,6 @@
 package eu.kanade.tachiyomi.animeextension.ru.amedia
 
-import android.app.Application
-import android.content.SharedPreferences
 import android.util.Log
-import androidx.preference.ListPreference
-import androidx.preference.PreferenceScreen
-import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -25,8 +20,6 @@ import okhttp3.Response
 import org.json.JSONObject
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
-import uy.kohesive.injekt.Injekt
-import uy.kohesive.injekt.api.get
 
 /**
  * Amedia (amedia.club) — сгенерировано extension-forge.
@@ -34,9 +27,7 @@ import uy.kohesive.injekt.api.get
  * Каталог и детали разбираются из HTML, плеер берётся через relay сайта
  * и передаётся в KodikExtractor.
  */
-class Amedia :
-    AnimeHttpLegacySource(),
-    ConfigurableAnimeSource {
+class Amedia : AnimeHttpLegacySource() {
 
     override val name = "Amedia"
 
@@ -46,11 +37,7 @@ class Amedia :
 
     override val supportsLatest = true
 
-    private val preferences: SharedPreferences by lazy {
-        Injekt.get<Application>().getSharedPreferences("source_$id", 0)
-    }
-
-    private val kodik by lazy { KodikExtractor(client, headers, baseUrl, preferences) }
+    private val kodik by lazy { KodikExtractor(client, headers, baseUrl) }
 
     /** id тайтла на сайте, по которому relay отдаёт плеер. */
     private var currentAnimeId: String = ""
@@ -308,19 +295,6 @@ class Amedia :
     }.getOrElse {
         Log.e("Amedia", "direct error", it)
         emptyList()
-    }
-
-    // ============================== Настройки =============================
-
-    override fun setupPreferenceScreen(screen: PreferenceScreen) {
-        ListPreference(screen.context).apply {
-            key = KodikExtractor.PREF_QUALITY
-            title = "Качество видео"
-            entries = arrayOf("Максимальное", "1080p", "720p", "480p", "360p")
-            entryValues = arrayOf("max", "1080", "720", "480", "360")
-            summary = "%s"
-            setDefaultValue("max")
-        }.let(screen::addPreference)
     }
 
     companion object {

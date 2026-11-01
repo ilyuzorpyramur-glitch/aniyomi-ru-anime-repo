@@ -1,6 +1,5 @@
 package eu.kanade.tachiyomi.animeextension.ru.amedia
 
-import android.content.SharedPreferences
 import android.net.Uri
 import android.util.Base64
 import android.util.Log
@@ -23,7 +22,6 @@ class KodikExtractor(
     private val client: OkHttpClient,
     private val headers: Headers,
     private val baseUrl: String,
-    private val preferences: SharedPreferences,
 ) {
     private val pageCache = mutableMapOf<String, String>()
 
@@ -73,14 +71,11 @@ class KodikExtractor(
                 ),
             )
         }
-        val ignoreSubs = preferences.getBoolean(PREF_IGNORE_SUBS, true)
-
         // Озвучки не отбрасываем: каждая — отдельный поток Kodik со своими id.
         val usable = translations
-            .filter { !ignoreSubs || !it.kind.contains("sub", ignoreCase = true) }
+            .filter { !it.kind.contains("sub", ignoreCase = true) }
             .distinctBy { it.title + "@" + it.mediaId }
-        val orderedTranslations = (usable.filter { matchesPreference(it.title) } + usable)
-            .distinctBy { it.title + "@" + it.mediaId }
+        val orderedTranslations = usable.distinctBy { it.title + "@" + it.mediaId }
 
         val qualities = preferredQualities()
         val videos = linkedMapOf<String, Video>()
@@ -196,22 +191,8 @@ class KodikExtractor(
         return data.optJSONObject("links")
     }
 
-    private fun preferredQualities(): List<String> {
-        val available = listOf("1080", "720", "480", "360", "240")
-        val useMax = preferences.getBoolean(PREF_USE_MAX_QUALITY, true)
-        if (useMax) return available
-        val chosen = preferences.getStringSet(PREF_QUALITY, emptySet()).orEmpty()
-        return available.filter { it in chosen } + available.filter { it !in chosen }
-    }
-
-    private fun matchesPreference(title: String): Boolean {
-        val raw = preferences.getString(PREF_DUB_TEAM, "").orEmpty()
-        if (raw.isBlank()) return true
-        val keywords = raw.split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() }
-        if (keywords.isEmpty()) return true
-        val lower = title.lowercase()
-        return keywords.any { lower.contains(it) }
-    }
+    /** Всегда максимальное доступное качество: настройки расширению не нужны. */
+    private fun preferredQualities(): List<String> = QUALITY_ORDER
 
     /** Сдвиг букв на 18 внутри регистра + base64 → прямой адрес плейлиста. */
     private fun decode(src: String): String? = runCatching {
@@ -238,10 +219,7 @@ class KodikExtractor(
 
     companion object {
         private const val TAG = "Animka"
-        const val PREF_USE_MAX_QUALITY = "pref_use_max_quality"
-        const val PREF_QUALITY = "pref_quality"
-        const val PREF_IGNORE_SUBS = "pref_ignore_subs"
-        const val PREF_DUB_TEAM = "pref_dub_team"
+        private val QUALITY_ORDER = listOf("1080", "720", "480", "360", "240")
 
         private val URL_PARAMS_REGEX = Regex("""urlParams\s*=\s*'([^']+)'""")
         private val TRANSLATION_OPTION_REGEX = Regex("""<option\b[^>]*data-media-id="[^"]*"[^>]*>""")
