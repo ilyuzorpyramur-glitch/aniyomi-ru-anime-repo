@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.animeextension.all.animru
 
 import android.util.Base64
 import androidx.preference.PreferenceScreen
+import keiyoushi.lib.animecommon.AnimeMeta
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -116,7 +117,9 @@ class AnimRu :
                 ?.distinct()
                 ?.take(10)
                 ?.joinToString(", ")
-            status = SAnime.COMPLETED
+            status = AnimeMeta.statusOf(doc.selectFirst("span:contains(Статус) ~ span")?.text())
+            rating = AnimeMeta.ratingOf(doc.selectFirst("span:contains(Рейтинг) ~ span")?.text())
+            year = AnimeMeta.yearOf(doc.selectFirst("span:contains(Год) ~ span")?.text())
         }
     }
 

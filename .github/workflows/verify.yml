@@ -32,3 +32,7 @@ jobs:
         run: python3 tools/audit_extensions.py
       - name: Сборка общей библиотеки
         run: ./gradlew :lib:animecommon:assembleDebug --console=plain
+      - name: Сборка исправленных расширений
+        run: >-
+          ./gradlew :src:all:kawaki:assembleDebug :src:ru:kinogo:assembleDebug
+          :src:all:animru:assembleDebug --console=plain

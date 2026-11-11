@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.animeextension.ru.kinogo
 
 import android.util.Base64
 import androidx.preference.PreferenceScreen
+import keiyoushi.lib.animecommon.AnimeMeta
 import aniyomi.lib.cloudflareinterceptor.CloudflareInterceptor
 import aniyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
@@ -121,7 +122,9 @@ class KinoGo :
             thumbnail_url = document.selectFirst(POSTER_SELECTOR)?.absUrl("src")
             genre = info["Жанры"]?.split('/')?.joinToString(", ") { it.trim() }
             author = info["Озвучки для вас"]
-            status = SAnime.COMPLETED
+            status = AnimeMeta.statusOf(info["Статус"])
+            rating = AnimeMeta.ratingOf(info["Рейтинг"])
+            year = AnimeMeta.yearOf(info["Год"] ?: info["Год выхода"])
             description = buildString {
                 document.selectFirst(".description__block")?.text()?.trim()
                     ?.takeIf { it.isNotBlank() }
