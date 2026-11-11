@@ -19,16 +19,40 @@ object AnimeMeta {
     const val ON_HIATUS = 6
 
     private val ONGOING_WORDS = listOf(
-        "онгоинг", "выходит", "продолжается", "сейчас выходит", "ongoing",
-        "currently airing", "airing", "анонс", "анонсирован", "ожидается",
+        "онгоинг",
+        "выходит",
+        "продолжается",
+        "сейчас выходит",
+        "ongoing",
+        "currently airing",
+        "airing",
+        "анонс",
+        "анонсирован",
+        "ожидается",
     )
+
     private val COMPLETED_WORDS = listOf(
-        "завершен", "завершён", "вышло полностью", "completed", "finished",
+        "завершен",
+        "завершён",
+        "вышло полностью",
+        "completed",
+        "finished",
     )
+
     private val HIATUS_WORDS = listOf(
-        "приостановлен", "заморожен", "перерыв", "hiatus", "on hold",
+        "приостановлен",
+        "заморожен",
+        "перерыв",
+        "hiatus",
+        "on hold",
     )
-    private val CANCELLED_WORDS = listOf("отменен", "отменён", "cancelled", "canceled")
+
+    private val CANCELLED_WORDS = listOf(
+        "отменен",
+        "отменён",
+        "cancelled",
+        "canceled",
+    )
 
     /** Статус по тексту страницы. Неизвестное — честное «неизвестно». */
     fun statusOf(raw: String?): Int {
@@ -65,7 +89,8 @@ object AnimeMeta {
     fun yearOf(raw: String?): Int {
         val text = raw?.trim().orEmpty()
         if (text.isEmpty()) return 0
-        return YEAR.find(text)?.value?.toIntOrNull()?.takeIf { it in 1950..2100 } ?: 0
+        val found = YEAR.find(text)?.value?.toIntOrNull() ?: return 0
+        return if (found in 1950..2100) found else 0
     }
 
     /** Первый непустой адрес картинки, приведённый к абсолютному. */
@@ -73,12 +98,10 @@ object AnimeMeta {
         for (raw in candidates) {
             val value = raw?.trim().orEmpty()
             if (value.isEmpty() || value.startsWith("data:")) continue
-            return when {
-                value.startsWith("http://") || value.startsWith("https://") -> value
-                value.startsWith("//") -> "https:$value"
-                value.startsWith("/") -> baseUrl.trimEnd('/') + value
-                else -> baseUrl.trimEnd('/') + "/" + value
-            }
+            if (value.startsWith("http://") || value.startsWith("https://")) return value
+            if (value.startsWith("//")) return "https:$value"
+            if (value.startsWith("/")) return baseUrl.trimEnd('/') + value
+            return baseUrl.trimEnd('/') + "/" + value
         }
         return ""
     }
