@@ -118,8 +118,6 @@ class AnimRu :
                 ?.take(10)
                 ?.joinToString(", ")
             status = AnimeMeta.statusOf(doc.selectFirst("span:contains(Статус) ~ span")?.text())
-            rating = AnimeMeta.ratingOf(doc.selectFirst("span:contains(Рейтинг) ~ span")?.text())
-            year = AnimeMeta.yearOf(doc.selectFirst("span:contains(Год) ~ span")?.text())
         }
     }
 

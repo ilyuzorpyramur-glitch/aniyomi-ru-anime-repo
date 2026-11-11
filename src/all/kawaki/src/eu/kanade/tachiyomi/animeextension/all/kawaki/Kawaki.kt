@@ -102,10 +102,6 @@ class Kawaki :
             status = AnimeMeta.statusOf(
                 doc.selectFirst("a[href*=/catalog?status=]")?.text(),
             )
-            rating = RATING_JSON.find(doc.html())?.groupValues?.get(1)
-                ?.toFloatOrNull() ?: -1f
-            year = YEAR_LINK.find(doc.html())?.groupValues?.get(1)
-                ?.toIntOrNull() ?: 0
         }
     }
 
@@ -301,8 +297,7 @@ class Kawaki :
         private const val VARIANTS_KEY = "variants"
 
         private val CARD_REGEX = Regex("""^/anime/\d+-[^/?#]+$""")
-        private val RATING_JSON = Regex("""ratingValue"\s*:\s*"([0-9]{1,2}(?:[.,][0-9]{1,2})?)"""")
-        private val YEAR_LINK = Regex("""/catalog\?year=(20[0-9]{2})""")
+
         private val QUALITY_REGEX = Regex("""(\d{3,4})p""")
         private val FALLBACK_URL_REGEX = Regex("""(https://[^"]+?/\d{3,4}\.mp4:hls:manifest\.m3u8)""")
     }

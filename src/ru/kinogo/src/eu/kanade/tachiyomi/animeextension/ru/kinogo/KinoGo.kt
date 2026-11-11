@@ -123,8 +123,6 @@ class KinoGo :
             genre = info["Жанры"]?.split('/')?.joinToString(", ") { it.trim() }
             author = info["Озвучки для вас"]
             status = AnimeMeta.statusOf(info["Статус"])
-            rating = AnimeMeta.ratingOf(info["Рейтинг"])
-            year = AnimeMeta.yearOf(info["Год"] ?: info["Год выхода"])
             description = buildString {
                 document.selectFirst(".description__block")?.text()?.trim()
                     ?.takeIf { it.isNotBlank() }
