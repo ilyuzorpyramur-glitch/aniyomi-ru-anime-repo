@@ -1,7 +1,6 @@
 package eu.kanade.tachiyomi.animeextension.all.kawaki
 
 import androidx.preference.PreferenceScreen
-import keiyoushi.lib.animecommon.AnimeMeta
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -10,6 +9,7 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.awaitSuccess
+import keiyoushi.lib.animecommon.AnimeMeta
 import keiyoushi.utils.AnimeHttpLegacySource
 import keiyoushi.utils.addListPreference
 import keiyoushi.utils.getPreferencesLazy
@@ -301,8 +301,8 @@ class Kawaki :
         private const val VARIANTS_KEY = "variants"
 
         private val CARD_REGEX = Regex("""^/anime/\d+-[^/?#]+$""")
-        private val RATING_JSON = Regex("""\\"ratingValue\\"\\s*:\\s*\\"([0-9]{1,2}(?:[.,][0-9]{1,2})?)\\"""")
-        private val YEAR_LINK = Regex("""/catalog\\?year=(20[0-9]{2})""")
+        private val RATING_JSON = Regex("""ratingValue"\s*:\s*"([0-9]{1,2}(?:[.,][0-9]{1,2})?)"""")
+        private val YEAR_LINK = Regex("""/catalog\?year=(20[0-9]{2})""")
         private val QUALITY_REGEX = Regex("""(\d{3,4})p""")
         private val FALLBACK_URL_REGEX = Regex("""(https://[^"]+?/\d{3,4}\.mp4:hls:manifest\.m3u8)""")
     }
