@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.animeextension.ru.amedia
 
 import android.util.Log
+import androidx.preference.ListPreference
+import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -10,6 +12,7 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import keiyoushi.utils.AnimeHttpLegacySource
+import keiyoushi.utils.getPreferencesLazy
 import keiyoushi.utils.bodyString
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -37,7 +40,13 @@ class Amedia : AnimeHttpLegacySource() {
 
     override val supportsLatest = true
 
-    private val kodik by lazy { KodikExtractor(client, headers, baseUrl) }
+    private val preferences by getPreferencesLazy()
+
+    private val kodik by lazy {
+        KodikExtractor(client, headers, baseUrl) {
+            preferences.getString(KodikExtractor.PREF_QUALITY, KodikExtractor.PREF_QUALITY_MAX)!!
+        }
+    }
 
     /** id тайтла на сайте, по которому relay отдаёт плеер. */
     private var currentAnimeId: String = ""
@@ -295,6 +304,19 @@ class Amedia : AnimeHttpLegacySource() {
     }.getOrElse {
         Log.e("Amedia", "direct error", it)
         emptyList()
+    }
+
+    override fun setupPreferenceScreen(screen: PreferenceScreen) {
+        ListPreference(screen.context).apply {
+            key = KodikExtractor.PREF_QUALITY
+            title = "Качество видео по умолчанию"
+            entries = arrayOf("Максимальное", "1080p", "720p", "480p", "360p")
+            entryValues = arrayOf(
+                KodikExtractor.PREF_QUALITY_MAX, "1080", "720", "480", "360",
+            )
+            summary = "%s"
+            setDefaultValue(KodikExtractor.PREF_QUALITY_MAX)
+        }.let(screen::addPreference)
     }
 
     companion object {

@@ -22,6 +22,7 @@ class KodikExtractor(
     private val client: OkHttpClient,
     private val headers: Headers,
     private val baseUrl: String,
+    private val preferredQuality: () -> String = { PREF_QUALITY_MAX },
 ) {
     private val pageCache = mutableMapOf<String, String>()
 
@@ -191,8 +192,13 @@ class KodikExtractor(
         return data.optJSONObject("links")
     }
 
-    /** Всегда максимальное доступное качество: настройки расширению не нужны. */
-    private fun preferredQualities(): List<String> = QUALITY_ORDER
+    /** Качества начиная с выбранного в настройках; «max» — весь список. */
+    private fun preferredQualities(): List<String> {
+        val wanted = preferredQuality()
+        if (wanted == PREF_QUALITY_MAX) return QUALITY_ORDER
+        val from = QUALITY_ORDER.indexOf(wanted)
+        return if (from >= 0) QUALITY_ORDER.drop(from) else QUALITY_ORDER
+    }
 
     /** Сдвиг букв на 18 внутри регистра + base64 → прямой адрес плейлиста. */
     private fun decode(src: String): String? = runCatching {
@@ -218,6 +224,9 @@ class KodikExtractor(
         .build()
 
     companion object {
+        const val PREF_QUALITY = "pref_quality"
+        const val PREF_QUALITY_MAX = "max"
+
         private const val TAG = "Animka"
         private val QUALITY_ORDER = listOf("1080", "720", "480", "360", "240")
 
