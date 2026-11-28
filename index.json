@@ -459,10 +459,10 @@
   {
     "name": "Aniyomi: Hentasis1",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.hentasis1",
-    "apk": "aniyomi-ru.hentasis1-v14.2.apk",
+    "apk": "aniyomi-ru.hentasis1-v14.3.apk",
     "lang": "ru",
-    "code": 2,
-    "version": "14.2",
+    "code": 3,
+    "version": "14.3",
     "nsfw": 1,
     "sources": [
       {
@@ -583,6 +583,24 @@
     ]
   },
   {
+    "name": "Aniyomi: Lakorn.land",
+    "pkg": "eu.kanade.tachiyomi.animeextension.ru.lakornland",
+    "apk": "aniyomi-ru.lakornland-v14.1.apk",
+    "lang": "ru",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 0,
+    "sources": [
+      {
+        "name": "Lakorn.land",
+        "lang": "ru",
+        "id": "6115136104969356836",
+        "baseUrl": "https://m.lakornland.top",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: LakornMania",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.lakornmania",
     "apk": "aniyomi-ru.lakornmania-v14.4.apk",
@@ -655,6 +673,42 @@
     ]
   },
   {
+    "name": "Aniyomi: Pornhub",
+    "pkg": "eu.kanade.tachiyomi.animeextension.all.pornhub",
+    "apk": "aniyomi-all.pornhub-v14.2.apk",
+    "lang": "all",
+    "code": 2,
+    "version": "14.2",
+    "nsfw": 1,
+    "sources": [
+      {
+        "name": "Pornhub",
+        "lang": "en",
+        "id": "3208952811632821250",
+        "baseUrl": "https://www.pornhub.com",
+        "versionId": 1
+      }
+    ]
+  },
+  {
+    "name": "Aniyomi: Rule34Video",
+    "pkg": "eu.kanade.tachiyomi.animeextension.all.rule34video",
+    "apk": "aniyomi-all.rule34video-v14.2.apk",
+    "lang": "all",
+    "code": 2,
+    "version": "14.2",
+    "nsfw": 1,
+    "sources": [
+      {
+        "name": "Rule34Video",
+        "lang": "en",
+        "id": "9212790518101043860",
+        "baseUrl": "https://rule34video.com",
+        "versionId": 1
+      }
+    ]
+  },
+  {
     "name": "Aniyomi: SENU Project",
     "pkg": "eu.kanade.tachiyomi.animeextension.ru.senu",
     "apk": "aniyomi-ru.senu-v14.1.apk",
@@ -668,6 +722,42 @@
         "lang": "ru",
         "id": "7615827653801207218",
         "baseUrl": "https://senu.pro",
+        "versionId": 1
+      }
+    ]
+  },
+  {
+    "name": "Aniyomi: Thumbzilla",
+    "pkg": "eu.kanade.tachiyomi.animeextension.all.thumbzilla",
+    "apk": "aniyomi-all.thumbzilla-v14.1.apk",
+    "lang": "all",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 1,
+    "sources": [
+      {
+        "name": "Thumbzilla",
+        "lang": "all",
+        "id": "4036330110661168544",
+        "baseUrl": "https://www.thumbzilla.com",
+        "versionId": 1
+      }
+    ]
+  },
+  {
+    "name": "Aniyomi: Tube8",
+    "pkg": "eu.kanade.tachiyomi.animeextension.all.tube8",
+    "apk": "aniyomi-all.tube8-v14.1.apk",
+    "lang": "all",
+    "code": 1,
+    "version": "14.1",
+    "nsfw": 1,
+    "sources": [
+      {
+        "name": "Tube8",
+        "lang": "all",
+        "id": "7337620581066590554",
+        "baseUrl": "https://www.tube8.com",
         "versionId": 1
       }
     ]
@@ -693,10 +783,10 @@
   {
     "name": "Aniyomi: XNXX",
     "pkg": "eu.kanade.tachiyomi.animeextension.all.xnxx",
-    "apk": "aniyomi-all.xnxx-v14.1.apk",
+    "apk": "aniyomi-all.xnxx-v14.2.apk",
     "lang": "all",
-    "code": 1,
-    "version": "14.1",
+    "code": 2,
+    "version": "14.2",
     "nsfw": 1,
     "sources": [
       {
@@ -711,10 +801,10 @@
   {
     "name": "Aniyomi: XV-RU",
     "pkg": "eu.kanade.tachiyomi.animeextension.all.xvru",
-    "apk": "aniyomi-all.xvru-v14.1.apk",
+    "apk": "aniyomi-all.xvru-v14.2.apk",
     "lang": "all",
-    "code": 1,
-    "version": "14.1",
+    "code": 2,
+    "version": "14.2",
     "nsfw": 1,
     "sources": [
       {
