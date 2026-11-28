@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.animeextension.all.rule34video
 
+import eu.kanade.tachiyomi.animesource.AnimeSource
+import eu.kanade.tachiyomi.animesource.AnimeSourceFactory
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
@@ -12,11 +14,16 @@ import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.Jsoup
 
+class Rule34VideoFactory : AnimeSourceFactory {
+    override fun createSources(): List<AnimeSource> = listOf(
+        Rule34Video("Rule34Video", "https://rule34video.com", "en"),
+    )
+}
+
 class Rule34Video(
     override val name: String,
     override val baseUrl: String,
     override val lang: String,
-    override val id: Long,
 ) : AnimeHttpLegacySource() {
 
     override val supportsLatest = true

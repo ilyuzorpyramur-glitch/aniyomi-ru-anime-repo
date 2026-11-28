@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.animeextension.all.pornhub
 
+import eu.kanade.tachiyomi.animesource.AnimeSource
+import eu.kanade.tachiyomi.animesource.AnimeSourceFactory
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
@@ -16,11 +18,16 @@ import okhttp3.Response
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 
+class PornhubFactory : AnimeSourceFactory {
+    override fun createSources(): List<AnimeSource> = listOf(
+        Pornhub("Pornhub", "https://www.pornhub.com", "en"),
+    )
+}
+
 class Pornhub(
     override val name: String,
     override val baseUrl: String,
     override val lang: String,
-    override val id: Long,
 ) : AnimeHttpLegacySource() {
 
     override val supportsLatest = true
